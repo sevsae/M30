@@ -9,8 +9,8 @@
 
     <application
         android:allowBackup="false"
-        android:label="M30HE Probe"
-        android:theme="@android:style/Theme.Material.Light">
+        android:label="M30 HE Keyboard"
+        android:theme="@style/M30Theme">
 
         <activity
             android:name=".MainActivity"

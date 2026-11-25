@@ -102,6 +102,13 @@ class MainActivity : Activity() {
 
     private lateinit var targetSpin: Spinner
     private lateinit var notificationBanner: TextView
+    private lateinit var pageTitle: TextView
+    private lateinit var pageSubtitle: TextView
+
+    private var tabletLayoutEnabled = false
+    private var wideLayoutEnabled = false
+    private val pageCardRows = mutableMapOf<String, LinearLayout>()
+    private val pageCardCounts = mutableMapOf<String, Int>()
 
     private lateinit var selectionCount: TextView
     private lateinit var lightColorInput: EditText
@@ -117,17 +124,17 @@ class MainActivity : Activity() {
     // DARK THEME COLORS
     // ------------------------------------------------------------
 
-    private val backgroundColor = Color.rgb(12, 15, 23)
-    private val cardColor = Color.rgb(23, 29, 42)
-    private val secondaryCardColor = Color.rgb(31, 39, 55)
+    private val backgroundColor = Color.rgb(11, 17, 25)
+    private val cardColor = Color.rgb(20, 30, 42)
+    private val secondaryCardColor = Color.rgb(31, 43, 56)
 
-    private val accentColor = Color.rgb(119, 137, 255)
-    private val successColor = Color.rgb(35, 133, 101)
-    private val warningColor = Color.rgb(184, 124, 42)
-    private val errorColor = Color.rgb(190, 65, 76)
+    private val accentColor = Color.rgb(99, 215, 195)
+    private val successColor = Color.rgb(35, 145, 111)
+    private val warningColor = Color.rgb(210, 157, 66)
+    private val errorColor = Color.rgb(198, 75, 86)
 
-    private val primaryText = Color.rgb(239, 242, 250)
-    private val secondaryText = Color.rgb(157, 169, 190)
+    private val primaryText = Color.rgb(242, 246, 249)
+    private val secondaryText = Color.rgb(166, 181, 195)
 
     // ------------------------------------------------------------
     // USB TRANSPORT
@@ -386,29 +393,64 @@ class MainActivity : Activity() {
             orientation = LinearLayout.VERTICAL
 
             setPadding(
-                dp(16),
-                dp(14),
-                dp(16),
-                dp(14)
+                dp(if (tabletLayoutEnabled) 22 else 16),
+                dp(if (tabletLayoutEnabled) 20 else 16),
+                dp(if (tabletLayoutEnabled) 22 else 16),
+                dp(if (tabletLayoutEnabled) 20 else 16)
             )
 
-            background = roundedBackground(cardColor, 16)
+            background = roundedBackground(cardColor, if (tabletLayoutEnabled) 20 else 16).apply {
+                setStroke(dp(1), Color.rgb(39, 54, 69))
+            }
         }
     }
 
     private fun addCard(
         parent: LinearLayout,
-        child: View
+        child: View,
+        fullWidth: Boolean = false
     ) {
 
-        val params = LinearLayout.LayoutParams(
-            LinearLayout.LayoutParams.MATCH_PARENT,
-            LinearLayout.LayoutParams.WRAP_CONTENT
-        )
+        val pageName = pages.entries.firstOrNull { it.value === parent }?.key
+        if (!wideLayoutEnabled || pageName == null) {
+            val params = LinearLayout.LayoutParams(-1, -2)
+            params.bottomMargin = dp(if (tabletLayoutEnabled) 16 else 12)
+            parent.addView(child, params)
+            return
+        }
 
-        params.bottomMargin = dp(12)
+        if (fullWidth) {
+            val cardRow = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
+            cardRow.addView(child, LinearLayout.LayoutParams(-1, -2))
+            parent.addView(cardRow, LinearLayout.LayoutParams(-1, -2).apply {
+                bottomMargin = dp(16)
+            })
+            pageCardRows.remove(pageName)
+            pageCardCounts.remove(pageName)
+            return
+        }
 
-        parent.addView(child, params)
+        var count = pageCardCounts[pageName] ?: 0
+        var cardRow = pageCardRows[pageName]
+        if (cardRow == null || count >= 2) {
+            cardRow = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
+            parent.addView(cardRow, LinearLayout.LayoutParams(-1, -2).apply {
+                bottomMargin = dp(16)
+            })
+            pageCardRows[pageName] = cardRow
+            count = 0
+        }
+
+        val params = LinearLayout.LayoutParams(0, -2, 1f)
+        if (count == 0) params.marginEnd = dp(12)
+        cardRow.addView(child, params)
+        count += 1
+        if (count == 2) {
+            pageCardRows.remove(pageName)
+            pageCardCounts.remove(pageName)
+        } else {
+            pageCardCounts[pageName] = count
+        }
     }
 
     private fun createPage(): LinearLayout = LinearLayout(this).apply {
@@ -416,14 +458,27 @@ class MainActivity : Activity() {
     }
 
     private fun showPage(name: String) {
+        val pageHeadings = mapOf(
+            "device" to ("Device" to "Connect your keyboard and choose a profile."),
+            "keys" to ("Keyboard setup" to "Tune trigger response and key assignments."),
+            "lighting" to ("Lighting" to "Choose a color and brightness for the active profile."),
+            "backup" to ("Backups" to "Save or restore your keyboard settings."),
+            "log" to ("Activity" to "Review keyboard connection and change results.")
+        )
+        val heading = pageHeadings[name] ?: ("M30" to "Keyboard settings")
+        pageTitle.text = heading.first
+        pageSubtitle.text = heading.second
         pages.forEach { (key, page) ->
             page.visibility = if (key == name) View.VISIBLE else View.GONE
         }
         navigationButtons.forEach { (key, button) ->
+            val selected = key == name
             button.background = roundedBackground(
-                if (key == name) Color.rgb(64, 78, 139) else secondaryCardColor,
-                10
+                if (selected) Color.rgb(29, 58, 63) else Color.TRANSPARENT,
+                12
             )
+            button.setTextColor(if (selected) accentColor else secondaryText)
+            button.typeface = if (selected) Typeface.DEFAULT_BOLD else Typeface.DEFAULT
         }
         if (name == "lighting" && ::lightColorInput.isInitialized) {
             refreshLighting()
@@ -439,7 +494,7 @@ class MainActivity : Activity() {
         parent.addView(
             createText(
                 title,
-                16f,
+                if (tabletLayoutEnabled) 19f else 16f,
                 primaryText,
                 true
             )
@@ -449,7 +504,7 @@ class MainActivity : Activity() {
             parent.addView(
                 createText(
                     subtitle,
-                    12f,
+                    if (tabletLayoutEnabled) 14f else 12f,
                     secondaryText
                 )
             )
@@ -461,7 +516,7 @@ class MainActivity : Activity() {
             spacer,
             LinearLayout.LayoutParams(
                 1,
-                dp(12)
+                dp(if (tabletLayoutEnabled) 16 else 12)
             )
         )
     }
@@ -469,20 +524,20 @@ class MainActivity : Activity() {
     private fun styleButton(button: Button) {
 
         button.isAllCaps = false
-        button.textSize = 12f
-        button.setTextColor(Color.WHITE)
+        button.textSize = if (tabletLayoutEnabled) 14f else 12f
+        button.setTextColor(primaryText)
 
         button.background = roundedBackground(
-            Color.rgb(54, 67, 120),
-            12
+            Color.rgb(38, 57, 74),
+            14
         )
 
-        button.minHeight = dp(44)
+        button.minHeight = dp(if (tabletLayoutEnabled) 52 else 46)
         button.setPadding(
+            dp(if (tabletLayoutEnabled) 14 else 10),
             dp(8),
-            dp(4),
-            dp(8),
-            dp(4)
+            dp(if (tabletLayoutEnabled) 14 else 10),
+            dp(8)
         )
     }
 
@@ -518,7 +573,7 @@ class MainActivity : Activity() {
                 1f
             )
 
-            lp.marginEnd = dp(6)
+            lp.marginEnd = dp(if (tabletLayoutEnabled) 10 else 6)
 
             r.addView(v, lp)
         }
@@ -874,6 +929,9 @@ class MainActivity : Activity() {
 
         buildTargets()
 
+        tabletLayoutEnabled = resources.configuration.smallestScreenWidthDp >= 600
+        wideLayoutEnabled = resources.configuration.screenWidthDp >= 900
+
         createNotificationChannel()
 
         window.statusBarColor = backgroundColor
@@ -883,86 +941,31 @@ class MainActivity : Activity() {
             window.decorView.systemUiVisibility = 0
         }
 
-        val root = LinearLayout(this)
+        val root = LinearLayout(this).apply {
+            orientation = if (wideLayoutEnabled) LinearLayout.HORIZONTAL else LinearLayout.VERTICAL
+            val outerPadding = if (tabletLayoutEnabled) dp(24) else dp(16)
+            setPadding(outerPadding, outerPadding, outerPadding, outerPadding)
+            setBackgroundColor(backgroundColor)
+        }
 
-        root.orientation = LinearLayout.VERTICAL
-
-        root.setPadding(
-            dp(16),
-            dp(12),
-            dp(16),
-            dp(12)
-        )
-
-        root.setBackgroundColor(backgroundColor)
-
-        // HEADER
-
-        val header = LinearLayout(this)
-
-        header.orientation = LinearLayout.VERTICAL
-
-        header.addView(
-            createText(
-                "M30 CONFIG",
-                27f,
-                primaryText,
-                true
-            )
-        )
-
-        header.addView(
-            createText(
-                "HALL EFFECT KEYBOARD MANAGER",
-                11f,
-                secondaryText,
-                true
-            )
-        )
-
-        val headerSpace = View(this)
-
-        header.addView(
-            headerSpace,
-            LinearLayout.LayoutParams(
-                1,
-                dp(16)
-            )
-        )
-
-        root.addView(header)
+        val header = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            addView(createText("M30", if (tabletLayoutEnabled) 30f else 27f, primaryText, true))
+            addView(createText("Keyboard control", 14f, secondaryText))
+        }
 
         // NOTIFICATION BANNER
-
-        notificationBanner = TextView(this)
-
-        notificationBanner.textSize = 13f
-        notificationBanner.setTextColor(Color.WHITE)
-        notificationBanner.typeface = Typeface.DEFAULT_BOLD
-
-        notificationBanner.setPadding(
-            dp(14),
-            dp(14),
-            dp(14),
-            dp(14)
-        )
-
-        notificationBanner.visibility = View.GONE
-
-        val bannerParams = LinearLayout.LayoutParams(
-            -1,
-            -2
-        )
-
-        bannerParams.bottomMargin = dp(12)
-
-        root.addView(
-            notificationBanner,
-            bannerParams
-        )
+        notificationBanner = TextView(this).apply {
+            textSize = if (tabletLayoutEnabled) 15f else 13f
+            setTextColor(Color.WHITE)
+            typeface = Typeface.DEFAULT_BOLD
+            setPadding(dp(16), dp(14), dp(16), dp(14))
+            visibility = View.GONE
+            background = roundedBackground(accentColor, 12)
+        }
 
         val nav = LinearLayout(this).apply {
-            orientation = LinearLayout.HORIZONTAL
+            orientation = if (wideLayoutEnabled) LinearLayout.VERTICAL else LinearLayout.HORIZONTAL
         }
         listOf(
             "device" to "Device",
@@ -972,20 +975,23 @@ class MainActivity : Activity() {
             "log" to "Log"
         ).forEach { (page, label) ->
             val button = btn(label) { showPage(page) }.apply {
-                textSize = 11f
+                textSize = if (tabletLayoutEnabled) 15f else 13f
                 minWidth = 0
-                minHeight = dp(42)
-                setPadding(dp(2), dp(4), dp(2), dp(4))
+                minHeight = dp(if (wideLayoutEnabled) 54 else if (tabletLayoutEnabled) 52 else 46)
+                gravity = if (wideLayoutEnabled) android.view.Gravity.START or android.view.Gravity.CENTER_VERTICAL else android.view.Gravity.CENTER
+                setPadding(dp(if (wideLayoutEnabled) 18 else 6), dp(8), dp(8), dp(8))
                 contentDescription = "$label page"
             }
             navigationButtons[page] = button
-            val params = LinearLayout.LayoutParams(0, dp(44), 1f)
-            params.marginEnd = dp(4)
+            val params = if (wideLayoutEnabled) {
+                LinearLayout.LayoutParams(-1, dp(54))
+            } else {
+                LinearLayout.LayoutParams(0, dp(if (tabletLayoutEnabled) 52 else 46), 1f)
+            }
+            params.bottomMargin = if (wideLayoutEnabled) dp(8) else 0
+            params.marginEnd = if (wideLayoutEnabled) 0 else dp(4)
             nav.addView(button, params)
         }
-        val navParams = LinearLayout.LayoutParams(-1, dp(44))
-        navParams.bottomMargin = dp(10)
-        root.addView(nav, navParams)
 
         pageHost = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
@@ -1000,7 +1006,61 @@ class MainActivity : Activity() {
             setBackgroundColor(backgroundColor)
             addView(pageHost)
         }
-        root.addView(scroll, LinearLayout.LayoutParams(-1, 0, 1f))
+
+        pageTitle = createText("Device", if (tabletLayoutEnabled) 28f else 22f, primaryText, true)
+        pageSubtitle = createText("Connect and manage your keyboard.", if (tabletLayoutEnabled) 15f else 13f, secondaryText)
+        val pageHeading = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            addView(pageTitle)
+            val subtitleParams = LinearLayout.LayoutParams(-1, -2)
+            subtitleParams.topMargin = dp(4)
+            addView(pageSubtitle, subtitleParams)
+        }
+
+        val mainContent = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+        }
+        if (wideLayoutEnabled) {
+            val sidebar = LinearLayout(this).apply {
+                orientation = LinearLayout.VERTICAL
+                setPadding(dp(16), dp(16), dp(16), dp(16))
+                background = roundedBackground(cardColor, 20)
+                addView(header)
+                val separator = View(this@MainActivity).apply { setBackgroundColor(secondaryCardColor) }
+                addView(separator, LinearLayout.LayoutParams(-1, dp(1)).apply {
+                    topMargin = dp(24)
+                    bottomMargin = dp(20)
+                })
+                addView(nav, LinearLayout.LayoutParams(-1, -2))
+                val footer = createText("M30 HE  ·  USB", 12f, secondaryText)
+                val footerParams = LinearLayout.LayoutParams(-1, -2)
+                footerParams.topMargin = dp(20)
+                addView(footer, footerParams)
+            }
+            val sidebarParams = LinearLayout.LayoutParams(dp(220), -1)
+            sidebarParams.marginEnd = dp(22)
+            root.addView(sidebar, sidebarParams)
+        } else {
+            root.addView(header)
+            val navParams = LinearLayout.LayoutParams(-1, -2)
+            navParams.topMargin = dp(16)
+            navParams.bottomMargin = dp(14)
+            root.addView(nav, navParams)
+        }
+
+        val bannerParams = LinearLayout.LayoutParams(-1, -2)
+        bannerParams.bottomMargin = dp(16)
+        mainContent.addView(notificationBanner, bannerParams)
+        val headingParams = LinearLayout.LayoutParams(-1, -2)
+        headingParams.bottomMargin = dp(if (tabletLayoutEnabled) 20 else 14)
+        mainContent.addView(pageHeading, headingParams)
+        mainContent.addView(scroll, LinearLayout.LayoutParams(-1, 0, 1f))
+        val mainContentParams = if (wideLayoutEnabled) {
+            LinearLayout.LayoutParams(0, -1, 1f)
+        } else {
+            LinearLayout.LayoutParams(-1, 0, 1f)
+        }
+        root.addView(mainContent, mainContentParams)
 
         // CONNECTION CARD
 
@@ -1140,7 +1200,7 @@ class MainActivity : Activity() {
 
         grid = GridLayout(this)
 
-        grid.columnCount = 4
+        grid.columnCount = if (tabletLayoutEnabled) 6 else 4
 
         grid.setPadding(
             0,
@@ -1241,7 +1301,7 @@ class MainActivity : Activity() {
             )
         )
 
-        addCard(pages.getValue("keys"), remapCard)
+        addCard(pages.getValue("keys"), remapCard, fullWidth = true)
 
         // BACKUP CARD
 
@@ -1264,7 +1324,7 @@ class MainActivity : Activity() {
             )
         )
 
-        addCard(pages.getValue("backup"), backupCard)
+        addCard(pages.getValue("backup"), backupCard, fullWidth = true)
 
         // LOG CARD
 
@@ -1310,7 +1370,7 @@ class MainActivity : Activity() {
             }
         )
 
-        addCard(pages.getValue("log"), logCard)
+        addCard(pages.getValue("log"), logCard, fullWidth = true)
 
         // RGB LIGHTING CARD
         val lightingCard = createCard()
@@ -1369,7 +1429,7 @@ class MainActivity : Activity() {
             btn("Read Lighting") { refreshLighting() },
             btn("Apply Color") { applyLightingClicked() }
         ))
-        addCard(pages.getValue("lighting"), lightingCard)
+        addCard(pages.getValue("lighting"), lightingCard, fullWidth = true)
 
         pages.values.forEach { it.visibility = View.GONE }
         pages.getValue("device").visibility = View.VISIBLE
@@ -2063,7 +2123,7 @@ class MainActivity : Activity() {
             val cb = CheckBox(this)
 
             cb.text = labelOf(i) + "\n#" + i
-            cb.textSize = 11f
+            cb.textSize = if (tabletLayoutEnabled) 13f else 11f
 
             cb.setTextColor(primaryText)
 
@@ -2073,16 +2133,16 @@ class MainActivity : Activity() {
             cb.tag = i
 
             cb.setPadding(
-                dp(4),
-                dp(5),
-                dp(4),
-                dp(5)
+                dp(if (tabletLayoutEnabled) 8 else 4),
+                dp(if (tabletLayoutEnabled) 9 else 5),
+                dp(if (tabletLayoutEnabled) 8 else 4),
+                dp(if (tabletLayoutEnabled) 9 else 5)
             )
 
             cb.setBackground(
                 roundedBackground(
                     secondaryCardColor,
-                    8
+                    if (tabletLayoutEnabled) 10 else 8
                 )
             )
 
