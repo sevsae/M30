@@ -21,7 +21,7 @@ import android.widget.LinearLayout
 import android.widget.ScrollView
 import android.widget.TextView
 
-// READ-ONLY probe v2. Sends only: 55 01 (info) and 55 07 (read config).
+// READ-ONLY probe v3. Sends only: 55 01, 55 04 (len 16), 55 07 (read).
 class MainActivity : Activity() {
 
     private val action = "com.example.m30probe.USB_PERMISSION"
@@ -125,27 +125,29 @@ class MainActivity : Activity() {
             if (ok && (chosen == null || itf.id == 1)) { chosen = itf; epIn = i; epOut = o }
         }
         if (chosen == null || epIn == null) { say("No HID interface with 64-byte IN endpoint."); conn.close(); return }
-        say("Using interface ${chosen.id} (out endpoint: ${if (epOut != null) "yes" else "no, using control SET_REPORT"})")
+        say("Using interface ${chosen.id}")
         if (!conn.claimInterface(chosen, true)) { say("claimInterface failed"); conn.close(); return }
 
         try {
-            say("Listening 1.5s before sending...")
-            val pre = ByteArray(64)
-            val pr = conn.bulkTransfer(epIn, pre, pre.size, 1500)
-            say("  pre-read result=$pr " + (if (pr > 0) hex(pre, pr) else ""))
-
-            say("Sending INFO (55 01)")
+            say("Sending 55 01")
             val info = request(conn, chosen, epIn, epOut, 0x01, 0, 0, 0)
-            say("INFO reply: " + (info?.let { hex(it) } ?: "none"))
-            val count = if (info == null) 1 else 10
-            for (i in 0 until count) {
-                val len = if (i == 9) 8 else 56
-                val addr = i * 56
-                say("Sending READ #$i addr=$addr len=$len")
-                val r = request(conn, chosen, epIn, epOut, 0x07, len, addr and 0xFF, addr shr 8)
-                say("READ #$i reply: " + (r?.let { hex(it) } ?: "none"))
+            say("  reply: " + (info?.let { hex(it) } ?: "none"))
+
+            say("Sending 55 04 len=16")
+            val p = request(conn, chosen, epIn, epOut, 0x04, 16, 0, 0)
+            say("  reply: " + (p?.let { hex(it) } ?: "none"))
+
+            say("Scanning 55 07 reads, addr 0000-3F00 step 0100...")
+            var hits = 0
+            for (base in 0 until 0x4000 step 0x100) {
+                val r = request(conn, chosen, epIn, epOut, 0x07, 56, base and 0xFF, base shr 8, 250, 1, true)
+                if (r != null) {
+                    hits++
+                    say("HIT addr=%04X: %s".format(base, hex(r)))
+                }
             }
-            say("Done. Tap Copy log and send it to Claude.")
+            say("Scan done, hits=$hits")
+            say("Tap Copy log and send it to Claude.")
         } finally {
             conn.releaseInterface(chosen)
             conn.close()
@@ -154,7 +156,8 @@ class MainActivity : Activity() {
 
     private fun request(
         conn: UsbDeviceConnection, itf: UsbInterface, epIn: UsbEndpoint, epOut: UsbEndpoint?,
-        cmd: Int, len: Int, lo: Int, hi: Int
+        cmd: Int, len: Int, lo: Int, hi: Int,
+        timeout: Int = 700, tries: Int = 3, quiet: Boolean = false
     ): ByteArray? {
         val req = ByteArray(64)
         req[0] = 0x55
@@ -164,12 +167,12 @@ class MainActivity : Activity() {
         req[6] = hi.toByte()
         val w = if (epOut != null) conn.bulkTransfer(epOut, req, req.size, 1000)
         else conn.controlTransfer(0x21, 0x09, 0x0200, itf.id, req, req.size, 1000)
-        say("  write result=$w")
+        if (!quiet) say("  write result=$w")
         if (w < 0) return null
-        for (k in 0 until 3) {
+        for (k in 0 until tries) {
             val buf = ByteArray(64)
-            val r = conn.bulkTransfer(epIn, buf, buf.size, 700)
-            say("  read[$k] result=$r " + (if (r > 0) hex(buf, r) else ""))
+            val r = conn.bulkTransfer(epIn, buf, buf.size, timeout)
+            if (!quiet) say("  read[$k] result=$r " + (if (r > 0) hex(buf, r) else ""))
             if (r > 0) return buf
         }
         return null
