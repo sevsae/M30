@@ -1885,7 +1885,7 @@ class MainActivity : Activity() {
                     lightColorInput.setText(color)
                     lightBrightness.progress = brightness
                     lightBrightnessLabel.text = "Brightness: $brightness%"
-                    lightStatus.text = "Profile $p loaded. Applying a color keeps its current lighting mode."
+                    lightStatus.text = "Profile $p loaded. Apply Color enables lighting effect 1."
                     updateLightPreview()
                 }
             }

@@ -6,20 +6,20 @@ import org.junit.Test
 
 class LightingConfigTest {
     @Test
-    fun configureSingleColorPreservesModeAndUnchangedBytes() {
+    fun configureSingleColorEnablesLightingAndPreservesUnchangedBytes() {
         val original = ByteArray(64) { it.toByte() }
 
         val updated = configureSingleColor(original, "#12aBef", 73)
 
         assertNotSame(original, updated)
-        assertEquals(original[8], updated[8])
+        assertEquals(1, updated[8].toInt() and 0xff)
         assertEquals(73, updated[9].toInt() and 0xff)
         assertEquals(0, updated[12].toInt() and 0xff)
         assertEquals(0x12, updated[14].toInt() and 0xff)
         assertEquals(0xab, updated[15].toInt() and 0xff)
         assertEquals(0xef, updated[16].toInt() and 0xff)
         for (index in original.indices) {
-            if (index !in setOf(9, 12, 14, 15, 16)) {
+            if (index !in setOf(8, 9, 12, 14, 15, 16)) {
                 assertEquals("byte $index", original[index], updated[index])
             }
         }

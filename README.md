@@ -6,8 +6,8 @@ and read, apply, and verify per-profile keyboard lighting settings. Lighting
 settings use command `0x05` to read and `0x06` to write the profile's 64-byte
 configuration bank.
 
-The RGB screen applies a solid color and brightness while preserving the
-profile's existing effect mode and unrelated lighting bytes. The app only shows
+The RGB screen applies a color and brightness using supported lighting effect 1
+(mode 0 can leave the LEDs off), while preserving unrelated lighting bytes. The app only shows
 physical keys discovered in the connected profile's keymap.
 
 Build without a PC (phone browser):
