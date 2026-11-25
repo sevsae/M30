@@ -21,7 +21,7 @@ import android.widget.LinearLayout
 import android.widget.ScrollView
 import android.widget.TextView
 
-// READ-ONLY probe. Sends only: 55 01 (info) and 55 07 (read config).
+// READ-ONLY probe v2. Sends only: 55 01 (info) and 55 07 (read config).
 class MainActivity : Activity() {
 
     private val action = "com.example.m30probe.USB_PERMISSION"
@@ -129,13 +129,21 @@ class MainActivity : Activity() {
         if (!conn.claimInterface(chosen, true)) { say("claimInterface failed"); conn.close(); return }
 
         try {
+            say("Listening 1.5s before sending...")
+            val pre = ByteArray(64)
+            val pr = conn.bulkTransfer(epIn, pre, pre.size, 1500)
+            say("  pre-read result=$pr " + (if (pr > 0) hex(pre, pr) else ""))
+
+            say("Sending INFO (55 01)")
             val info = request(conn, chosen, epIn, epOut, 0x01, 0, 0, 0)
-            say("INFO (55 01) reply: " + (info?.let { hex(it) } ?: "none"))
-            for (i in 0 until 10) {
+            say("INFO reply: " + (info?.let { hex(it) } ?: "none"))
+            val count = if (info == null) 1 else 10
+            for (i in 0 until count) {
                 val len = if (i == 9) 8 else 56
                 val addr = i * 56
+                say("Sending READ #$i addr=$addr len=$len")
                 val r = request(conn, chosen, epIn, epOut, 0x07, len, addr and 0xFF, addr shr 8)
-                say("READ #$i addr=$addr len=$len: " + (r?.let { hex(it) } ?: "none"))
+                say("READ #$i reply: " + (r?.let { hex(it) } ?: "none"))
             }
             say("Done. Tap Copy log and send it to Claude.")
         } finally {
@@ -156,12 +164,13 @@ class MainActivity : Activity() {
         req[6] = hi.toByte()
         val w = if (epOut != null) conn.bulkTransfer(epOut, req, req.size, 1000)
         else conn.controlTransfer(0x21, 0x09, 0x0200, itf.id, req, req.size, 1000)
-        if (w < 0) { say("  write failed ($w)"); return null }
-        repeat(6) {
+        say("  write result=$w")
+        if (w < 0) return null
+        for (k in 0 until 3) {
             val buf = ByteArray(64)
-            val r = conn.bulkTransfer(epIn, buf, buf.size, 1000)
-            if (r <= 0) return null
-            if (buf[0] == 0x55.toByte()) return buf
+            val r = conn.bulkTransfer(epIn, buf, buf.size, 700)
+            say("  read[$k] result=$r " + (if (r > 0) hex(buf, r) else ""))
+            if (r > 0) return buf
         }
         return null
     }
