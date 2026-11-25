@@ -1107,7 +1107,7 @@ class MainActivity : Activity() {
             setTextColor(primaryText)
             textSize = 14f
             inputType = InputType.TYPE_CLASS_TEXT
-            singleLine = true
+            setSingleLine(true)
             setPadding(dp(12), dp(8), dp(12), dp(8))
             background = roundedBackground(secondaryCardColor, 10)
             addTextChangedListener(object : android.text.TextWatcher {
@@ -1324,7 +1324,7 @@ class MainActivity : Activity() {
             setHintTextColor(secondaryText)
             setTextColor(primaryText)
             textSize = 16f
-            singleLine = true
+            setSingleLine(true)
             inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_FLAG_CAP_CHARACTERS
             filters = arrayOf(InputFilter.LengthFilter(7))
             setPadding(dp(12), dp(10), dp(12), dp(10))
