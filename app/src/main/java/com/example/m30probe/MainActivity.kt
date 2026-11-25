@@ -25,10 +25,13 @@ import android.hardware.usb.UsbInterface
 import android.hardware.usb.UsbManager
 import android.os.Build
 import android.os.Bundle
+import android.text.InputFilter
+import android.text.InputType
 import android.view.View
 import android.widget.ArrayAdapter
 import android.widget.Button
 import android.widget.CheckBox
+import android.widget.EditText
 import android.widget.GridLayout
 import android.widget.LinearLayout
 import android.widget.ScrollView
@@ -84,6 +87,11 @@ class MainActivity : Activity() {
     private lateinit var logView: TextView
     private lateinit var status: TextView
     private lateinit var grid: GridLayout
+    private lateinit var keySearch: EditText
+    private lateinit var pageHost: LinearLayout
+
+    private val pages = linkedMapOf<String, LinearLayout>()
+    private val navigationButtons = linkedMapOf<String, Button>()
 
     private lateinit var actS: Slider
     private lateinit var pressS: Slider
@@ -96,6 +104,11 @@ class MainActivity : Activity() {
     private lateinit var notificationBanner: TextView
 
     private lateinit var selectionCount: TextView
+    private lateinit var lightColorInput: EditText
+    private lateinit var lightBrightness: SeekBar
+    private lateinit var lightBrightnessLabel: TextView
+    private lateinit var lightPreview: View
+    private lateinit var lightStatus: TextView
 
     private val notificationChannelId = "m30_config_notifications"
     private var notificationCounter = 100
@@ -396,6 +409,25 @@ class MainActivity : Activity() {
         params.bottomMargin = dp(12)
 
         parent.addView(child, params)
+    }
+
+    private fun createPage(): LinearLayout = LinearLayout(this).apply {
+        orientation = LinearLayout.VERTICAL
+    }
+
+    private fun showPage(name: String) {
+        pages.forEach { (key, page) ->
+            page.visibility = if (key == name) View.VISIBLE else View.GONE
+        }
+        navigationButtons.forEach { (key, button) ->
+            button.background = roundedBackground(
+                if (key == name) Color.rgb(64, 78, 139) else secondaryCardColor,
+                10
+            )
+        }
+        if (name == "lighting" && ::lightColorInput.isInitialized) {
+            refreshLighting()
+        }
     }
 
     private fun addSectionTitle(
@@ -857,9 +889,9 @@ class MainActivity : Activity() {
 
         root.setPadding(
             dp(16),
+            dp(12),
             dp(16),
-            dp(16),
-            dp(24)
+            dp(12)
         )
 
         root.setBackgroundColor(backgroundColor)
@@ -929,6 +961,47 @@ class MainActivity : Activity() {
             bannerParams
         )
 
+        val nav = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+        }
+        listOf(
+            "device" to "Device",
+            "keys" to "Keys",
+            "lighting" to "RGB",
+            "backup" to "Backup",
+            "log" to "Log"
+        ).forEach { (page, label) ->
+            val button = btn(label) { showPage(page) }.apply {
+                textSize = 11f
+                minWidth = 0
+                minHeight = dp(42)
+                setPadding(dp(2), dp(4), dp(2), dp(4))
+                contentDescription = "$label page"
+            }
+            navigationButtons[page] = button
+            val params = LinearLayout.LayoutParams(0, dp(44), 1f)
+            params.marginEnd = dp(4)
+            nav.addView(button, params)
+        }
+        val navParams = LinearLayout.LayoutParams(-1, dp(44))
+        navParams.bottomMargin = dp(10)
+        root.addView(nav, navParams)
+
+        pageHost = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+        }
+        listOf("device", "keys", "lighting", "backup", "log").forEach { name ->
+            val page = createPage()
+            pages[name] = page
+            pageHost.addView(page)
+        }
+        val scroll = ScrollView(this).apply {
+            setFillViewport(true)
+            setBackgroundColor(backgroundColor)
+            addView(pageHost)
+        }
+        root.addView(scroll, LinearLayout.LayoutParams(-1, 0, 1f))
+
         // CONNECTION CARD
 
         val connectionCard = createCard()
@@ -960,7 +1033,7 @@ class MainActivity : Activity() {
 
         connectionCard.addView(status)
 
-        addCard(root, connectionCard)
+        addCard(pages.getValue("device"), connectionCard)
 
         // PROFILE CARD
 
@@ -979,9 +1052,16 @@ class MainActivity : Activity() {
                 },
                 btn("PROFILE 1") {
                     loadClicked(1)
-                },
+                }
+            )
+        )
+        profileCard.addView(
+            row(
                 btn("PROFILE 2") {
                     loadClicked(2)
+                },
+                btn("PROFILE 3") {
+                    loadClicked(3)
                 }
             )
         )
@@ -1001,7 +1081,7 @@ class MainActivity : Activity() {
 
         profileCard.addView(switchButton)
 
-        addCard(root, profileCard)
+        addCard(pages.getValue("device"), profileCard)
 
         // KEY SELECTOR CARD
 
@@ -1021,6 +1101,28 @@ class MainActivity : Activity() {
 
         keysCard.addView(selectionCount)
 
+        keySearch = EditText(this).apply {
+            hint = "Search detected keys"
+            setHintTextColor(secondaryText)
+            setTextColor(primaryText)
+            textSize = 14f
+            inputType = InputType.TYPE_CLASS_TEXT
+            singleLine = true
+            setPadding(dp(12), dp(8), dp(12), dp(8))
+            background = roundedBackground(secondaryCardColor, 10)
+            addTextChangedListener(object : android.text.TextWatcher {
+                override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) = Unit
+                override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {
+                    renderGrid(s?.toString().orEmpty())
+                }
+                override fun afterTextChanged(s: android.text.Editable?) = Unit
+            })
+        }
+        val searchParams = LinearLayout.LayoutParams(-1, dp(48))
+        searchParams.topMargin = dp(8)
+        searchParams.bottomMargin = dp(4)
+        keysCard.addView(keySearch, searchParams)
+
         keysCard.addView(
             row(
                 btn("Select All") {
@@ -1038,7 +1140,7 @@ class MainActivity : Activity() {
 
         grid = GridLayout(this)
 
-        grid.columnCount = 5
+        grid.columnCount = 4
 
         grid.setPadding(
             0,
@@ -1049,7 +1151,7 @@ class MainActivity : Activity() {
 
         keysCard.addView(grid)
 
-        addCard(root, keysCard)
+        addCard(pages.getValue("keys"), keysCard)
 
         // TRIGGER SETTINGS CARD
 
@@ -1106,7 +1208,7 @@ class MainActivity : Activity() {
             }
         )
 
-        addCard(root, triggerCard)
+        addCard(pages.getValue("keys"), triggerCard)
 
         // REMAPPING CARD
 
@@ -1139,7 +1241,7 @@ class MainActivity : Activity() {
             )
         )
 
-        addCard(root, remapCard)
+        addCard(pages.getValue("keys"), remapCard)
 
         // BACKUP CARD
 
@@ -1162,7 +1264,7 @@ class MainActivity : Activity() {
             )
         )
 
-        addCard(root, backupCard)
+        addCard(pages.getValue("backup"), backupCard)
 
         // LOG CARD
 
@@ -1208,18 +1310,72 @@ class MainActivity : Activity() {
             }
         )
 
-        addCard(root, logCard)
+        addCard(pages.getValue("log"), logCard)
 
-        // SCROLL VIEW
+        // RGB LIGHTING CARD
+        val lightingCard = createCard()
+        addSectionTitle(
+            lightingCard,
+            "KEYBOARD LIGHTING",
+            "Set a solid RGB color and brightness for this profile."
+        )
+        lightColorInput = EditText(this).apply {
+            hint = "RRGGBB"
+            setHintTextColor(secondaryText)
+            setTextColor(primaryText)
+            textSize = 16f
+            singleLine = true
+            inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_FLAG_CAP_CHARACTERS
+            filters = arrayOf(InputFilter.LengthFilter(7))
+            setPadding(dp(12), dp(10), dp(12), dp(10))
+            background = roundedBackground(secondaryCardColor, 10)
+            setText("FFFFFF")
+            addTextChangedListener(object : android.text.TextWatcher {
+                override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) = Unit
+                override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {
+                    updateLightPreview()
+                }
+                override fun afterTextChanged(s: android.text.Editable?) = Unit
+            })
+        }
+        lightingCard.addView(lightColorInput)
+        lightPreview = View(this).apply {
+            background = roundedBackground(Color.WHITE, 8)
+        }
+        val previewParams = LinearLayout.LayoutParams(-1, dp(34))
+        previewParams.topMargin = dp(10)
+        previewParams.bottomMargin = dp(8)
+        lightingCard.addView(lightPreview, previewParams)
+        lightBrightnessLabel = createText("Brightness: 50%", 14f, primaryText, true)
+        lightingCard.addView(lightBrightnessLabel)
+        lightBrightness = SeekBar(this).apply {
+            max = 100
+            progress = 50
+            progressTintList = android.content.res.ColorStateList.valueOf(accentColor)
+            thumbTintList = android.content.res.ColorStateList.valueOf(accentColor)
+            setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
+                override fun onProgressChanged(seekBar: SeekBar?, progress: Int, fromUser: Boolean) {
+                    lightBrightnessLabel.text = "Brightness: $progress%"
+                }
+                override fun onStartTrackingTouch(seekBar: SeekBar?) = Unit
+                override fun onStopTrackingTouch(seekBar: SeekBar?) = Unit
+            })
+        }
+        lightingCard.addView(lightBrightness)
+        lightStatus = createText("Connect the keyboard to read its lighting settings.", 12f, secondaryText)
+        lightStatus.setPadding(0, dp(8), 0, dp(10))
+        lightingCard.addView(lightStatus)
+        lightingCard.addView(row(
+            btn("Read Lighting") { refreshLighting() },
+            btn("Apply Color") { applyLightingClicked() }
+        ))
+        addCard(pages.getValue("lighting"), lightingCard)
 
-        val scroll = ScrollView(this)
+        pages.values.forEach { it.visibility = View.GONE }
+        pages.getValue("device").visibility = View.VISIBLE
 
-        scroll.setFillViewport(true)
-        scroll.setBackgroundColor(backgroundColor)
-
-        scroll.addView(root)
-
-        setContentView(scroll)
+        setContentView(root)
+        showPage("device")
 
         // USB RECEIVER
 
@@ -1693,6 +1849,98 @@ class MainActivity : Activity() {
         }
     }
 
+    private fun updateLightPreview() {
+        if (!::lightPreview.isInitialized || !::lightColorInput.isInitialized) return
+        val rgb = lightColorInput.text.toString().trim().removePrefix("#")
+        if (!rgb.matches(Regex("[0-9a-fA-F]{6}"))) return
+        val red = rgb.substring(0, 2).toInt(16)
+        val green = rgb.substring(2, 4).toInt(16)
+        val blue = rgb.substring(4, 6).toInt(16)
+        lightPreview.background = roundedBackground(Color.rgb(red, green, blue), 8)
+    }
+
+    private fun refreshLighting() {
+        val p = profile
+        if (kb == null) {
+            lightStatus.text = "Connect the keyboard to read its lighting settings."
+            return
+        }
+        lightStatus.text = "Reading profile $p lighting settings..."
+        io.execute {
+            guard {
+                val config = kb?.read(0x05, 64 * p, 64)
+                if (config == null || config.size != 64) {
+                    log("Lighting read failed for profile $p.")
+                    runOnUiThread { lightStatus.text = "Could not read lighting settings for profile $p." }
+                    return@guard
+                }
+                val color = "%02X%02X%02X".format(
+                    Locale.US,
+                    config[14].toInt() and 0xFF,
+                    config[15].toInt() and 0xFF,
+                    config[16].toInt() and 0xFF
+                )
+                val brightness = (config[9].toInt() and 0xFF).coerceIn(0, 100)
+                runOnUiThread {
+                    lightColorInput.setText(color)
+                    lightBrightness.progress = brightness
+                    lightBrightnessLabel.text = "Brightness: $brightness%"
+                    lightStatus.text = "Profile $p loaded. Applying a color keeps its current lighting mode."
+                    updateLightPreview()
+                }
+            }
+        }
+    }
+
+    private fun applyLightingClicked() {
+        val color = lightColorInput.text.toString().trim()
+        if (!color.removePrefix("#").matches(Regex("[0-9a-fA-F]{6}"))) {
+            showNotification("Invalid RGB Color", "Enter six hexadecimal digits, such as 40A8FF.", "warning")
+            return
+        }
+        val brightness = lightBrightness.progress
+        val p = profile
+        lightStatus.text = "Applying profile $p lighting settings..."
+        io.execute {
+            guard {
+                val k = kb
+                if (k == null) {
+                    runOnUiThread { lightStatus.text = "Connect the keyboard before applying lighting." }
+                    showNotification("Keyboard Not Connected", "Connect the keyboard before applying lighting.", "warning")
+                    return@guard
+                }
+                val current = k.read(0x05, 64 * p, 64)
+                if (current == null || current.size != 64) {
+                    log("Lighting read failed; nothing was written for profile $p.")
+                    runOnUiThread { lightStatus.text = "Could not read profile $p; nothing was changed." }
+                    showNotification("Lighting Read Failed", "Could not load profile $p before writing.", "error")
+                    return@guard
+                }
+                val updated = configureSingleColor(current, color, brightness)
+                if (!k.write(0x06, 64 * p, updated)) {
+                    log("Lighting write failed for profile $p.")
+                    runOnUiThread { lightStatus.text = "The keyboard did not accept the lighting settings." }
+                    showNotification("Lighting Write Failed", "The keyboard did not accept the lighting settings.", "error")
+                    return@guard
+                }
+                val verified = k.read(0x05, 64 * p, 64)
+                val matches = verified != null && verified.size == 64 &&
+                    listOf(9, 12, 14, 15, 16).all { verified[it] == updated[it] }
+                if (!matches) {
+                    log("Lighting settings were written, but read-back did not match for profile $p.")
+                    runOnUiThread { lightStatus.text = "Settings were written, but verification failed." }
+                    showNotification("Lighting Verification Failed", "The keyboard's read-back did not match the requested color.", "warning")
+                    return@guard
+                }
+                log("Verified profile $p RGB color #${color.removePrefix("#").uppercase(Locale.US)} at $brightness% brightness.")
+                runOnUiThread {
+                    lightStatus.text = "Profile $p lighting settings verified."
+                    showNotification("Lighting Updated", "RGB color and brightness were verified on profile $p.")
+                }
+            }
+        }
+    }
+
     private fun loadProfile(p0: Int): Boolean {
 
         val k = kb
@@ -1856,12 +2104,23 @@ class MainActivity : Activity() {
                 dp(2)
             )
 
-            grid.addView(cb, lp)
-
             boxes.add(cb)
+            grid.addView(cb, lp)
         }
 
+        renderGrid(keySearch.text?.toString().orEmpty())
         updateSelectionCount()
+    }
+
+    private fun renderGrid(query: String) {
+        if (!::grid.isInitialized) return
+        val normalized = query.trim()
+        boxes.forEach { box ->
+            box.visibility = if (
+                normalized.isEmpty() ||
+                box.text.toString().contains(normalized, ignoreCase = true)
+            ) View.VISIBLE else View.GONE
+        }
     }
 
     private fun selected(): List<Int> {

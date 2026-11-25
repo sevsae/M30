@@ -1,7 +1,14 @@
-# M30HE Probe (read-only)
+# M30HE Keyboard Manager
 
-Sends only `55 01` and `55 07` read commands to a keyboard with USB vendor ID 0x19F5.
-Never writes settings.
+Android USB-OTG utility for M30 Hall-effect keyboards (USB vendor ID `0x19F5`).
+The app can read and write trigger settings and key mappings, switch profiles,
+and read, apply, and verify per-profile keyboard lighting settings. Lighting
+settings use command `0x05` to read and `0x06` to write the profile's 64-byte
+configuration bank.
+
+The RGB screen applies a solid color and brightness while preserving the
+profile's existing effect mode and unrelated lighting bytes. The app only shows
+physical keys discovered in the connected profile's keymap.
 
 Build without a PC (phone browser):
 1. Make a free GitHub account, create a new repo.
