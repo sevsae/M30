@@ -143,7 +143,7 @@ class MainActivity : Activity() {
     // ------------------------------------------------------------
 
     private val cardColor = Color.argb(208, 22, 32, 44)
-    private val secondaryCardColor = Color.argb(142, 34, 48, 60)
+    private val secondaryCardColor = Color.argb(170, 30, 43, 54)
 
     private val accentColor = Color.rgb(99, 215, 195)
     private val successColor = Color.rgb(35, 145, 111)
@@ -182,19 +182,6 @@ class MainActivity : Activity() {
             val top = dp(4).toFloat()
 
             ink.style = Paint.Style.FILL
-            ink.shader = android.graphics.LinearGradient(
-                left, top, right, h - dp(4),
-                Color.argb(105, 148, 185, 192),
-                Color.argb(48, 25, 43, 55),
-                android.graphics.Shader.TileMode.CLAMP
-            )
-            canvas.drawRoundRect(RectF(left, top, right, h - dp(4)), dp(15).toFloat(), dp(15).toFloat(), ink)
-            ink.shader = null
-            ink.style = Paint.Style.STROKE
-            ink.strokeWidth = dp(1).toFloat()
-            ink.color = Color.argb(94, 215, 240, 235)
-            canvas.drawRoundRect(RectF(left, top, right, h - dp(4)), dp(15).toFloat(), dp(15).toFloat(), ink)
-            ink.style = Paint.Style.FILL
 
             ink.color = secondaryText
             ink.textSize = sp(10f)
@@ -206,9 +193,10 @@ class MainActivity : Activity() {
             ink.typeface = Typeface.create("sans-serif-medium", Typeface.NORMAL)
             val value = "%.2f".format(Locale.US, actuationMm)
             canvas.drawText(value, left + dp(12), top + dp(55), ink)
+            val valueWidth = ink.measureText(value)
             ink.color = accentColor
             ink.textSize = sp(13f)
-            canvas.drawText("mm", left + dp(12) + ink.measureText(value) + dp(5), top + dp(55), ink)
+            canvas.drawText("mm", left + dp(12) + valueWidth + dp(5), top + dp(55), ink)
 
             val railLeft = left + dp(12)
             val railRight = right - dp(12)
@@ -238,9 +226,9 @@ class MainActivity : Activity() {
             canvas.drawText(maxLabel, railRight - ink.measureText(maxLabel), railY + dp(19), ink)
 
             val state = when {
-                keyName.isEmpty() -> "PRESS ANY KEY"
-                keyDown -> "${keyName.take(14)}  ·  PRESSED"
-                else -> "${keyName.take(14)}  ·  RELEASED"
+                keyName.isEmpty() -> "Press a key"
+                keyDown -> "${keyName.take(14)} pressed"
+                else -> "${keyName.take(14)} released"
             }
             ink.color = if (keyDown) accentColor else secondaryText
             ink.textSize = sp(10f)
@@ -665,12 +653,12 @@ class MainActivity : Activity() {
         GradientDrawable(
             GradientDrawable.Orientation.TOP_BOTTOM,
             intArrayOf(
-                Color.argb(178, 54, 70, 83),
-                Color.argb(158, 20, 31, 43)
+                Color.argb(210, 53, 69, 82),
+                Color.argb(194, 20, 31, 43)
             )
         ).apply {
             cornerRadius = dp(radius).toFloat()
-            setStroke(dp(1), Color.argb(92, 205, 230, 232))
+            setStroke(dp(1), Color.argb(112, 205, 230, 232))
         }
 
     private fun createText(
@@ -1250,15 +1238,17 @@ class MainActivity : Activity() {
                 if (isFinishing || isDestroyed) return@Consumer
                 if (blurEnabled) {
                     window.addFlags(android.view.WindowManager.LayoutParams.FLAG_BLUR_BEHIND)
+                    window.addFlags(android.view.WindowManager.LayoutParams.FLAG_DIM_BEHIND)
                     window.attributes = window.attributes.apply {
-                        blurBehindRadius = dp(32)
-                        dimAmount = 0.06f
+                        blurBehindRadius = dp(48)
+                        dimAmount = 0.10f
                     }
                 } else {
                     window.clearFlags(android.view.WindowManager.LayoutParams.FLAG_BLUR_BEHIND)
+                    window.addFlags(android.view.WindowManager.LayoutParams.FLAG_DIM_BEHIND)
                     window.attributes = window.attributes.apply {
                         blurBehindRadius = 0
-                        dimAmount = 0.15f
+                        dimAmount = 0.28f
                     }
                 }
             }
@@ -1567,6 +1557,7 @@ class MainActivity : Activity() {
 
         grid = GridLayout(this)
 
+        grid.orientation = GridLayout.HORIZONTAL
         grid.columnCount = if (tabletLayoutEnabled) 6 else 4
 
         grid.setPadding(
@@ -1929,7 +1920,7 @@ class MainActivity : Activity() {
             val title = createText("Trigger", 14f, primaryText, true)
             addView(title, LinearLayout.LayoutParams(0, -2, 1f))
             addView(TextView(this@MainActivity).apply {
-                text = "OPEN"
+                text = "Open"
                 textSize = 10f
                 typeface = Typeface.DEFAULT_BOLD
                 setTextColor(accentColor)
@@ -2562,6 +2553,7 @@ class MainActivity : Activity() {
         runOnUiThread {
 
             rebuildGrid()
+            onSelection()
 
             status.text =
                 "● Connected  |  Editing P$p  |  Active P$activeProfile"
@@ -2750,34 +2742,29 @@ class MainActivity : Activity() {
             return
         }
 
-        if (sel.size != 1) {
-            triggerScope.text = "Changes will apply to all ${sel.size} selected keys."
+        val representativeKey = sel.first()
+        val settings = readTriggerSettings(trig, representativeKey)
+        if (settings == null) {
+            triggerScope.text = "Could not load saved trigger settings for the selected key."
             return
         }
 
-        val i = sel[0]
-        triggerScope.text = "Editing ${labelOf(i)} only. Saved settings loaded."
+        actS.setTo(settings.actuation)
+        pressS.setTo(settings.pressDistance)
+        relS.setTo(settings.releaseDistance)
+        rtSw.isChecked = settings.rapidTrigger
+        contSw.isChecked = settings.continuousRapidTrigger
 
-        val d = IntArray(8) {
-            trig[i * 8 + it].toInt() and 0xFF
+        if (sel.size == 1) {
+            triggerScope.text = "${labelOf(representativeKey)} · saved values loaded"
+        } else {
+            val mixed = sel.any { readTriggerSettings(trig, it) != settings }
+            triggerScope.text = if (mixed) {
+                "Mixed saved values · showing ${labelOf(representativeKey)}. Applying will copy these values to all ${sel.size} selected keys."
+            } else {
+                "Saved values loaded · applying changes to all ${sel.size} selected keys."
+            }
         }
-
-        actS.setTo(
-            (((d[3] and 1) shl 8) or d[2]) + 1
-        )
-
-        pressS.setTo(
-            (((d[5] and 1) shl 8) or d[4]) + 1
-        )
-
-        relS.setTo(
-            (((d[7] and 1) shl 8) or d[6]) + 1
-        )
-
-        val mode = d[1] and 0x0F
-
-        rtSw.isChecked = mode > 0
-        contSw.isChecked = mode >= 2
     }
 
     // ------------------------------------------------------------
