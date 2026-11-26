@@ -15,6 +15,10 @@ import android.content.Intent
 import android.content.IntentFilter
 import android.content.pm.PackageManager
 import android.graphics.Color
+import android.graphics.Canvas
+import android.graphics.Paint
+import android.graphics.Path
+import android.graphics.RectF
 import android.graphics.Typeface
 import android.graphics.drawable.GradientDrawable
 import android.hardware.usb.UsbConstants
@@ -28,6 +32,8 @@ import android.os.Bundle
 import android.text.InputFilter
 import android.text.InputType
 import android.view.View
+import android.view.KeyEvent
+import android.animation.ValueAnimator
 import android.widget.ArrayAdapter
 import android.widget.Button
 import android.widget.CheckBox
@@ -116,6 +122,7 @@ class MainActivity : Activity() {
     private lateinit var lightBrightnessLabel: TextView
     private lateinit var lightPreview: View
     private lateinit var lightStatus: TextView
+    private lateinit var travelVisual: KeyTravelView
 
     private val notificationChannelId = "m30_config_notifications"
     private var notificationCounter = 100
@@ -135,6 +142,142 @@ class MainActivity : Activity() {
 
     private val primaryText = Color.rgb(242, 246, 249)
     private val secondaryText = Color.rgb(166, 181, 195)
+
+    /** A switch illustration driven by digital HID key events and the configured actuation threshold. */
+    private inner class KeyTravelView : View(this@MainActivity) {
+        private val ink = Paint(Paint.ANTI_ALIAS_FLAG)
+        private var keyName = "—"
+        private var keyDown = false
+        private var pressAmount = 0f
+        private var actuationMm = 2.0f
+        private var animator: ValueAnimator? = null
+
+        fun setKeyEvent(name: String, pressed: Boolean) {
+            keyName = name
+            keyDown = pressed
+            animator?.cancel()
+            animator = ValueAnimator.ofFloat(pressAmount, if (pressed) 1f else 0f).apply {
+                duration = 115
+                addUpdateListener {
+                    pressAmount = it.animatedValue as Float
+                    invalidate()
+                }
+                start()
+            }
+        }
+
+        fun setActuation(valueMm: Float) {
+            actuationMm = valueMm.coerceIn(0.1f, 3.4f)
+            invalidate()
+        }
+
+        override fun onDraw(canvas: Canvas) {
+            super.onDraw(canvas)
+            val w = width.toFloat()
+            val h = height.toFloat()
+            if (w <= 0f || h <= 0f) return
+
+            val left = dp(18).toFloat()
+            val right = w - dp(18)
+            val top = dp(22).toFloat()
+            val bottom = h - dp(32)
+            val scaleX = right - dp(36)
+            val scaleTop = top + dp(20)
+            val scaleBottom = bottom - dp(5)
+            val scaleHeight = scaleBottom - scaleTop
+            val thresholdY = scaleTop + scaleHeight * (actuationMm / 3.5f)
+
+            ink.style = Paint.Style.FILL
+            ink.color = Color.rgb(13, 22, 30)
+            canvas.drawRoundRect(RectF(left, top, scaleX - dp(20), bottom), dp(18).toFloat(), dp(18).toFloat(), ink)
+
+            // Plate and switch housing.
+            val centerX = (left + scaleX - dp(20)) / 2f
+            val plateY = top + (bottom - top) * 0.70f
+            ink.color = Color.rgb(68, 89, 103)
+            canvas.drawRoundRect(RectF(left + dp(20), plateY, scaleX - dp(44), plateY + dp(12)), dp(5).toFloat(), dp(5).toFloat(), ink)
+            ink.color = Color.rgb(92, 119, 132)
+            canvas.drawRoundRect(RectF(centerX - dp(45), plateY - dp(73), centerX + dp(45), bottom - dp(12)), dp(13).toFloat(), dp(13).toFloat(), ink)
+            ink.color = Color.rgb(47, 68, 79)
+            canvas.drawRoundRect(RectF(centerX - dp(31), plateY - dp(58), centerX + dp(31), bottom - dp(12)), dp(9).toFloat(), dp(9).toFloat(), ink)
+
+            // Spring and stem are illustrative; Android HID only reports key down/up.
+            val springTop = plateY - dp(52) + dp((pressAmount * 11).toInt())
+            val springBottom = plateY - dp(11)
+            val spring = Path().apply {
+                moveTo(centerX, springTop)
+                val turns = 6
+                for (i in 1..turns) {
+                    val y = springTop + (springBottom - springTop) * i / (turns + 1)
+                    lineTo(centerX + if (i % 2 == 0) dp(9) else -dp(9), y)
+                }
+                lineTo(centerX, springBottom)
+            }
+            ink.color = accentColor
+            ink.strokeWidth = dp(3).toFloat()
+            ink.style = Paint.Style.STROKE
+            ink.strokeCap = Paint.Cap.ROUND
+            canvas.drawPath(spring, ink)
+            ink.style = Paint.Style.FILL
+
+            // Keycap moves on a real down/up event, but is not a millimeter reading.
+            val capDrop = dp((pressAmount * 24).toInt()).toFloat()
+            val capTop = top + dp(28) + capDrop
+            val capBottom = plateY - dp(49) + capDrop
+            val cap = Path().apply {
+                moveTo(centerX - dp(63), capBottom)
+                lineTo(centerX - dp(52), capTop + dp(14))
+                quadTo(centerX - dp(49), capTop, centerX - dp(36), capTop)
+                lineTo(centerX + dp(36), capTop)
+                quadTo(centerX + dp(49), capTop, centerX + dp(52), capTop + dp(14))
+                lineTo(centerX + dp(63), capBottom)
+                close()
+            }
+            ink.color = if (keyDown) accentColor else Color.rgb(153, 181, 191)
+            canvas.drawPath(cap, ink)
+            ink.color = if (keyDown) Color.rgb(45, 139, 130) else Color.rgb(105, 135, 146)
+            canvas.drawRoundRect(RectF(centerX - dp(22), capBottom - dp(3), centerX + dp(22), capBottom + dp(18)), dp(6).toFloat(), dp(6).toFloat(), ink)
+
+            // Millimeter scale indicates the configured actuation point only.
+            ink.color = Color.rgb(106, 127, 139)
+            ink.strokeWidth = dp(1).toFloat()
+            val tickX = right - dp(49)
+            for (i in 0..7) {
+                val y = scaleTop + scaleHeight * i / 7f
+                canvas.drawLine(tickX, y, tickX + dp(if (i % 2 == 0) 12 else 7), y, ink)
+                if (i % 2 == 0) {
+                    ink.style = Paint.Style.FILL
+                    ink.textSize = sp(11f)
+                    ink.typeface = Typeface.create("sans-serif-medium", Typeface.NORMAL)
+                    ink.color = secondaryText
+                    canvas.drawText("%.1f".format(Locale.US, i * 0.5f), tickX - dp(38), y + dp(4), ink)
+                    ink.color = Color.rgb(106, 127, 139)
+                    ink.style = Paint.Style.STROKE
+                }
+            }
+            ink.color = accentColor
+            ink.strokeWidth = dp(2).toFloat()
+            canvas.drawLine(tickX - dp(5), thresholdY, right - dp(15), thresholdY, ink)
+            ink.style = Paint.Style.FILL
+            val marker = Path().apply {
+                moveTo(right - dp(10), thresholdY)
+                lineTo(right, thresholdY - dp(7))
+                lineTo(right, thresholdY + dp(7))
+                close()
+            }
+            canvas.drawPath(marker, ink)
+
+            ink.color = primaryText
+            ink.textSize = sp(16f)
+            ink.typeface = Typeface.DEFAULT_BOLD
+            canvas.drawText(if (keyDown) "$keyName  ·  pressed" else "$keyName  ·  released", left + dp(16), bottom + dp(22), ink)
+            ink.color = accentColor
+            ink.textSize = sp(12f)
+            canvas.drawText("Actuation  %.2f mm".format(Locale.US, actuationMm), tickX - dp(8), thresholdY - dp(10), ink)
+        }
+
+        private fun sp(value: Float): Float = value * resources.displayMetrics.scaledDensity
+    }
 
     // ------------------------------------------------------------
     // USB TRANSPORT
@@ -627,6 +770,9 @@ class MainActivity : Activity() {
                         fromUser: Boolean
                     ) {
                         refresh()
+                        if (::travelVisual.isInitialized && title == "Actuation Point") {
+                            travelVisual.setActuation(value / 100f)
+                        }
                     }
 
                     override fun onStartTrackingTouch(s: SeekBar?) {
@@ -1270,6 +1416,25 @@ class MainActivity : Activity() {
 
         addCard(pages.getValue("keys"), triggerCard)
 
+        // Live visual: Android supplies digital key events; travel is not reported by this protocol.
+        val travelCard = createCard()
+        addSectionTitle(
+            travelCard,
+            "LIVE KEY VISUAL",
+            "Press a key to see it move. The scale marks your actuation setting, not measured travel."
+        )
+        travelVisual = KeyTravelView().apply {
+            contentDescription = "Key switch illustration with configured actuation point and live key press state"
+            setActuation(actS.value / 100f)
+        }
+        travelCard.addView(travelVisual, LinearLayout.LayoutParams(-1, dp(280)))
+        travelCard.addView(createText(
+            "Live press state · analog travel is not available from this keyboard connection.",
+            if (tabletLayoutEnabled) 13f else 11f,
+            secondaryText
+        ))
+        addCard(pages.getValue("keys"), travelCard, fullWidth = true)
+
         // REMAPPING CARD
 
         val remapCard = createCard()
@@ -1474,6 +1639,25 @@ class MainActivity : Activity() {
 
         io.shutdownNow()
     }
+
+    override fun onKeyDown(keyCode: Int, event: KeyEvent): Boolean {
+        if (::travelVisual.isInitialized && event.repeatCount == 0) {
+            travelVisual.setKeyEvent(keyNameForEvent(keyCode), true)
+        }
+        return super.onKeyDown(keyCode, event)
+    }
+
+    override fun onKeyUp(keyCode: Int, event: KeyEvent): Boolean {
+        if (::travelVisual.isInitialized) {
+            travelVisual.setKeyEvent(keyNameForEvent(keyCode), false)
+        }
+        return super.onKeyUp(keyCode, event)
+    }
+
+    private fun keyNameForEvent(keyCode: Int): String =
+        KeyEvent.keyCodeToString(keyCode)
+            .removePrefix("KEYCODE_")
+            .replace('_', ' ')
 
     // ------------------------------------------------------------
     // KEY NAMING
