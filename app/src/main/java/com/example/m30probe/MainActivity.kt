@@ -16,9 +16,11 @@ import android.content.IntentFilter
 import android.content.pm.PackageManager
 import android.graphics.Color
 import android.graphics.Canvas
+import android.graphics.LinearGradient
 import android.graphics.Paint
 import android.graphics.Path
 import android.graphics.RectF
+import android.graphics.Shader
 import android.graphics.Typeface
 import android.graphics.drawable.GradientDrawable
 import android.hardware.usb.UsbConstants
@@ -102,6 +104,7 @@ class MainActivity : Activity() {
     private lateinit var actS: Slider
     private lateinit var pressS: Slider
     private lateinit var relS: Slider
+    private lateinit var triggerScope: TextView
 
     private lateinit var rtSw: Switch
     private lateinit var contSw: Switch
@@ -146,7 +149,7 @@ class MainActivity : Activity() {
     /** A switch illustration driven by digital HID key events and the configured actuation threshold. */
     private inner class KeyTravelView : View(this@MainActivity) {
         private val ink = Paint(Paint.ANTI_ALIAS_FLAG)
-        private var keyName = "—"
+        private var keyName = ""
         private var keyDown = false
         private var pressAmount = 0f
         private var actuationMm = 2.0f
@@ -177,29 +180,42 @@ class MainActivity : Activity() {
             val h = height.toFloat()
             if (w <= 0f || h <= 0f) return
 
-            val left = dp(18).toFloat()
-            val right = w - dp(18)
-            val top = dp(22).toFloat()
+            val left = dp(8).toFloat()
+            val right = w - dp(8)
+            val top = dp(10).toFloat()
             val bottom = h - dp(32)
-            val scaleX = right - dp(36)
+            val scaleX = right - dp(34)
             val scaleTop = top + dp(20)
             val scaleBottom = bottom - dp(5)
             val scaleHeight = scaleBottom - scaleTop
             val thresholdY = scaleTop + scaleHeight * (actuationMm / 3.5f)
 
             ink.style = Paint.Style.FILL
-            ink.color = Color.rgb(13, 22, 30)
-            canvas.drawRoundRect(RectF(left, top, scaleX - dp(20), bottom), dp(18).toFloat(), dp(18).toFloat(), ink)
+            ink.shader = LinearGradient(
+                left, top, scaleX, bottom,
+                Color.rgb(26, 40, 50), Color.rgb(13, 21, 29), Shader.TileMode.CLAMP
+            )
+            canvas.drawRoundRect(RectF(left, top, scaleX - dp(16), bottom), dp(20).toFloat(), dp(20).toFloat(), ink)
+            ink.shader = null
+            ink.color = Color.rgb(49, 68, 79)
+            ink.style = Paint.Style.STROKE
+            ink.strokeWidth = dp(1).toFloat()
+            canvas.drawRoundRect(RectF(left, top, scaleX - dp(16), bottom), dp(20).toFloat(), dp(20).toFloat(), ink)
+            ink.style = Paint.Style.FILL
 
             // Plate and switch housing.
-            val centerX = (left + scaleX - dp(20)) / 2f
-            val plateY = top + (bottom - top) * 0.70f
+            val centerX = (left + scaleX - dp(16)) / 2f
+            val plateY = top + (bottom - top) * 0.71f
             ink.color = Color.rgb(68, 89, 103)
-            canvas.drawRoundRect(RectF(left + dp(20), plateY, scaleX - dp(44), plateY + dp(12)), dp(5).toFloat(), dp(5).toFloat(), ink)
-            ink.color = Color.rgb(92, 119, 132)
-            canvas.drawRoundRect(RectF(centerX - dp(45), plateY - dp(73), centerX + dp(45), bottom - dp(12)), dp(13).toFloat(), dp(13).toFloat(), ink)
-            ink.color = Color.rgb(47, 68, 79)
-            canvas.drawRoundRect(RectF(centerX - dp(31), plateY - dp(58), centerX + dp(31), bottom - dp(12)), dp(9).toFloat(), dp(9).toFloat(), ink)
+            canvas.drawRoundRect(RectF(left + dp(22), plateY, scaleX - dp(38), plateY + dp(12)), dp(5).toFloat(), dp(5).toFloat(), ink)
+            ink.shader = LinearGradient(
+                centerX - dp(45).toFloat(), plateY, centerX + dp(45).toFloat(), plateY,
+                Color.rgb(119, 146, 157), Color.rgb(51, 73, 84), Shader.TileMode.CLAMP
+            )
+            canvas.drawRoundRect(RectF(centerX - dp(45), plateY - dp(73), centerX + dp(45), bottom - dp(12)), dp(14).toFloat(), dp(14).toFloat(), ink)
+            ink.shader = null
+            ink.color = Color.rgb(39, 57, 67)
+            canvas.drawRoundRect(RectF(centerX - dp(31), plateY - dp(58), centerX + dp(31), bottom - dp(12)), dp(10).toFloat(), dp(10).toFloat(), ink)
 
             // Spring and stem are illustrative; Android HID only reports key down/up.
             val springTop = plateY - dp(52) + dp((pressAmount * 11).toInt())
@@ -233,8 +249,19 @@ class MainActivity : Activity() {
                 lineTo(centerX + dp(63), capBottom)
                 close()
             }
-            ink.color = if (keyDown) accentColor else Color.rgb(153, 181, 191)
+            ink.shader = LinearGradient(
+                centerX, capTop, centerX, capBottom,
+                if (keyDown) Color.rgb(177, 255, 237) else Color.rgb(232, 241, 241),
+                if (keyDown) Color.rgb(60, 181, 154) else Color.rgb(112, 145, 155),
+                Shader.TileMode.CLAMP
+            )
             canvas.drawPath(cap, ink)
+            ink.shader = null
+            ink.color = Color.rgb(207, 230, 229)
+            ink.strokeWidth = dp(2).toFloat()
+            ink.style = Paint.Style.STROKE
+            canvas.drawLine(centerX - dp(34), capTop + dp(5), centerX + dp(34), capTop + dp(5), ink)
+            ink.style = Paint.Style.FILL
             ink.color = if (keyDown) Color.rgb(45, 139, 130) else Color.rgb(105, 135, 146)
             canvas.drawRoundRect(RectF(centerX - dp(22), capBottom - dp(3), centerX + dp(22), capBottom + dp(18)), dp(6).toFloat(), dp(6).toFloat(), ink)
 
@@ -242,6 +269,8 @@ class MainActivity : Activity() {
             ink.color = Color.rgb(106, 127, 139)
             ink.strokeWidth = dp(1).toFloat()
             val tickX = right - dp(49)
+            ink.color = Color.rgb(19, 29, 37)
+            canvas.drawRoundRect(RectF(tickX - dp(4), scaleTop, tickX + dp(8), scaleBottom), dp(5).toFloat(), dp(5).toFloat(), ink)
             for (i in 0..7) {
                 val y = scaleTop + scaleHeight * i / 7f
                 canvas.drawLine(tickX, y, tickX + dp(if (i % 2 == 0) 12 else 7), y, ink)
@@ -255,6 +284,9 @@ class MainActivity : Activity() {
                     ink.style = Paint.Style.STROKE
                 }
             }
+            ink.color = Color.argb(90, 99, 215, 195)
+            ink.strokeWidth = dp(7).toFloat()
+            canvas.drawLine(tickX - dp(4), thresholdY, right - dp(14), thresholdY, ink)
             ink.color = accentColor
             ink.strokeWidth = dp(2).toFloat()
             canvas.drawLine(tickX - dp(5), thresholdY, right - dp(15), thresholdY, ink)
@@ -268,12 +300,18 @@ class MainActivity : Activity() {
             canvas.drawPath(marker, ink)
 
             ink.color = primaryText
-            ink.textSize = sp(16f)
+            ink.textSize = sp(if (tabletLayoutEnabled) 18f else 15f)
             ink.typeface = Typeface.DEFAULT_BOLD
-            canvas.drawText(if (keyDown) "$keyName  ·  pressed" else "$keyName  ·  released", left + dp(16), bottom + dp(22), ink)
+            val eventLabel = when {
+                keyName.isEmpty() -> "Press any key"
+                keyDown -> "$keyName pressed"
+                else -> "$keyName released"
+            }
+            canvas.drawText(eventLabel, left + dp(12), bottom + dp(22), ink)
             ink.color = accentColor
             ink.textSize = sp(12f)
-            canvas.drawText("Actuation  %.2f mm".format(Locale.US, actuationMm), tickX - dp(8), thresholdY - dp(10), ink)
+            val thresholdLabel = "%.2f mm".format(Locale.US, actuationMm)
+            canvas.drawText(thresholdLabel, right - dp(12) - ink.measureText(thresholdLabel), thresholdY - dp(11), ink)
         }
 
         private fun sp(value: Float): Float = value * resources.displayMetrics.scaledDensity
@@ -1295,8 +1333,8 @@ class MainActivity : Activity() {
 
         addSectionTitle(
             keysCard,
-            "KEY SELECTOR",
-            "Choose the keys you want to configure."
+            "Key selection",
+            "Choose which detected keys receive the trigger settings below."
         )
 
         selectionCount = createText(
@@ -1305,7 +1343,18 @@ class MainActivity : Activity() {
             secondaryText
         )
 
+        selectionCount.textSize = if (tabletLayoutEnabled) 14f else 12f
         keysCard.addView(selectionCount)
+        val selectionHint = createText(
+            "All keys start selected for batch changes. To edit one key, search for it and choose Select shown.",
+            if (tabletLayoutEnabled) 14f else 12f,
+            secondaryText
+        )
+        val selectionHintParams = LinearLayout.LayoutParams(-1, -2).apply {
+            topMargin = dp(4)
+            bottomMargin = dp(10)
+        }
+        keysCard.addView(selectionHint, selectionHintParams)
 
         keySearch = EditText(this).apply {
             hint = "Search detected keys"
@@ -1329,20 +1378,14 @@ class MainActivity : Activity() {
         searchParams.bottomMargin = dp(4)
         keysCard.addView(keySearch, searchParams)
 
-        keysCard.addView(
-            row(
-                btn("Select All") {
-                    boxes.forEach {
-                        it.isChecked = true
-                    }
-                },
-                btn("Clear Selection") {
-                    boxes.forEach {
-                        it.isChecked = false
-                    }
-                }
-            )
-        )
+        keysCard.addView(row(
+            btn("Select all") { boxes.forEach { it.isChecked = true } },
+            btn("Select shown") {
+                val visible = boxes.filter { it.visibility == View.VISIBLE }.map { it.tag as Int }.toSet()
+                boxes.forEach { it.isChecked = (it.tag as Int) in visible }
+            },
+            btn("Clear") { boxes.forEach { it.isChecked = false } }
+        ))
 
         grid = GridLayout(this)
 
@@ -1357,7 +1400,7 @@ class MainActivity : Activity() {
 
         keysCard.addView(grid)
 
-        addCard(pages.getValue("keys"), keysCard)
+        addCard(pages.getValue("keys"), keysCard, fullWidth = true)
 
         // TRIGGER SETTINGS CARD
 
@@ -1365,9 +1408,18 @@ class MainActivity : Activity() {
 
         addSectionTitle(
             triggerCard,
-            "ACTUATION & RAPID TRIGGER",
-            "Configure actuation and rapid trigger distances."
+            "Trigger response",
+            "Set actuation and rapid trigger sensitivity."
         )
+
+        triggerScope = createText(
+            "Settings will apply to all detected keys.",
+            if (tabletLayoutEnabled) 14f else 12f,
+            accentColor,
+            true
+        )
+        triggerScope.setPadding(0, 0, 0, dp(12))
+        triggerCard.addView(triggerScope)
 
         actS = Slider(
             "Actuation Point",
@@ -1420,20 +1472,20 @@ class MainActivity : Activity() {
         val travelCard = createCard()
         addSectionTitle(
             travelCard,
-            "LIVE KEY VISUAL",
-            "Press a key to see it move. The scale marks your actuation setting, not measured travel."
+            "Key travel preview",
+            "Press a key to see the switch respond. The marker shows the configured actuation point."
         )
         travelVisual = KeyTravelView().apply {
             contentDescription = "Key switch illustration with configured actuation point and live key press state"
             setActuation(actS.value / 100f)
         }
-        travelCard.addView(travelVisual, LinearLayout.LayoutParams(-1, dp(280)))
+        travelCard.addView(travelVisual, LinearLayout.LayoutParams(-1, dp(if (tabletLayoutEnabled) 320 else 280)))
         travelCard.addView(createText(
-            "Live press state · analog travel is not available from this keyboard connection.",
+            "Live key state · this keyboard connection does not report analog depth.",
             if (tabletLayoutEnabled) 13f else 11f,
             secondaryText
         ))
-        addCard(pages.getValue("keys"), travelCard, fullWidth = true)
+        addCard(pages.getValue("keys"), travelCard)
 
         // REMAPPING CARD
 
@@ -2297,10 +2349,11 @@ class MainActivity : Activity() {
     // KEY SELECTION
     // ------------------------------------------------------------
 
-    private fun rebuildGrid() {
+    private fun rebuildGrid(retainedSelection: Set<Int>? = null) {
 
         grid.removeAllViews()
         boxes.clear()
+        val selectedKeys = initialKeySelection(keyIdx, retainedSelection)
 
         for (i in keyIdx) {
 
@@ -2315,6 +2368,7 @@ class MainActivity : Activity() {
                 android.content.res.ColorStateList.valueOf(accentColor)
 
             cb.tag = i
+            cb.isChecked = i in selectedKeys
 
             cb.setPadding(
                 dp(if (tabletLayoutEnabled) 8 else 4),
@@ -2359,11 +2413,20 @@ class MainActivity : Activity() {
     private fun renderGrid(query: String) {
         if (!::grid.isInitialized) return
         val normalized = query.trim()
+        val exactMatch = boxes.any { box ->
+            val label = box.text.toString().substringBefore('\n')
+            label.equals(normalized, ignoreCase = true) ||
+                normalized.startsWith("#") && normalized.drop(1).toIntOrNull() == (box.tag as Int)
+        }
         boxes.forEach { box ->
-            box.visibility = if (
-                normalized.isEmpty() ||
-                box.text.toString().contains(normalized, ignoreCase = true)
-            ) View.VISIBLE else View.GONE
+            val label = box.text.toString().substringBefore('\n')
+            val matches = normalized.isEmpty() || if (exactMatch) {
+                label.equals(normalized, ignoreCase = true) ||
+                    normalized.startsWith("#") && normalized.drop(1).toIntOrNull() == (box.tag as Int)
+            } else {
+                label.contains(normalized, ignoreCase = true)
+            }
+            box.visibility = if (matches) View.VISIBLE else View.GONE
         }
     }
 
@@ -2380,8 +2443,7 @@ class MainActivity : Activity() {
 
             val count = selected().size
 
-            selectionCount.text =
-                "$count keys selected"
+            selectionCount.text = "$count of ${keyIdx.size} keys selected"
         }
     }
 
@@ -2391,9 +2453,18 @@ class MainActivity : Activity() {
 
         val sel = selected()
 
-        if (sel.size != 1) return
+        if (sel.isEmpty()) {
+            triggerScope.text = "Select a key to load its saved settings."
+            return
+        }
+
+        if (sel.size != 1) {
+            triggerScope.text = "Changes will apply to all ${sel.size} selected keys."
+            return
+        }
 
         val i = sel[0]
+        triggerScope.text = "Editing ${labelOf(i)} only. Saved settings loaded."
 
         val d = IntArray(8) {
             trig[i * 8 + it].toInt() and 0xFF
@@ -2777,16 +2848,7 @@ class MainActivity : Activity() {
 
         runOnUiThread {
 
-            val checked = selected()
-
-            rebuildGrid()
-
-            for (b in boxes) {
-
-                if ((b.tag as Int) in checked) {
-                    b.isChecked = true
-                }
-            }
+            rebuildGrid(selected().toSet())
         }
     }
 
