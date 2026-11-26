@@ -22,6 +22,7 @@ import android.graphics.Path
 import android.graphics.RectF
 import android.graphics.Shader
 import android.graphics.Typeface
+import android.graphics.drawable.ColorDrawable
 import android.graphics.drawable.GradientDrawable
 import android.hardware.usb.UsbConstants
 import android.hardware.usb.UsbDevice
@@ -36,10 +37,12 @@ import android.text.InputType
 import android.view.View
 import android.view.KeyEvent
 import android.animation.ValueAnimator
+import android.view.Gravity
 import android.widget.ArrayAdapter
 import android.widget.Button
 import android.widget.CheckBox
 import android.widget.EditText
+import android.widget.FrameLayout
 import android.widget.GridLayout
 import android.widget.LinearLayout
 import android.widget.ScrollView
@@ -94,6 +97,7 @@ class MainActivity : Activity() {
 
     private lateinit var logView: TextView
     private lateinit var status: TextView
+    private lateinit var profileSummary: TextView
     private lateinit var grid: GridLayout
     private lateinit var keySearch: EditText
     private lateinit var pageHost: LinearLayout
@@ -126,6 +130,8 @@ class MainActivity : Activity() {
     private lateinit var lightPreview: View
     private lateinit var lightStatus: TextView
     private lateinit var travelVisual: KeyTravelView
+    private lateinit var dockVisual: KeyTravelView
+    private var wideSidebar: LinearLayout? = null
 
     private val notificationChannelId = "m30_config_notifications"
     private var notificationCounter = 100
@@ -134,9 +140,8 @@ class MainActivity : Activity() {
     // DARK THEME COLORS
     // ------------------------------------------------------------
 
-    private val backgroundColor = Color.rgb(11, 17, 25)
-    private val cardColor = Color.rgb(20, 30, 42)
-    private val secondaryCardColor = Color.rgb(31, 43, 56)
+    private val cardColor = Color.argb(208, 22, 32, 44)
+    private val secondaryCardColor = Color.argb(186, 34, 48, 60)
 
     private val accentColor = Color.rgb(99, 215, 195)
     private val successColor = Color.rgb(35, 145, 111)
@@ -550,6 +555,18 @@ class MainActivity : Activity() {
         }
     }
 
+    private fun glassBackground(radius: Int = 18): GradientDrawable =
+        GradientDrawable(
+            GradientDrawable.Orientation.TOP_BOTTOM,
+            intArrayOf(
+                Color.argb(222, 54, 70, 83),
+                Color.argb(202, 26, 38, 51)
+            )
+        ).apply {
+            cornerRadius = dp(radius).toFloat()
+            setStroke(dp(1), Color.argb(138, 185, 215, 221))
+        }
+
     private fun createText(
         value: String,
         size: Float = 14f,
@@ -574,15 +591,14 @@ class MainActivity : Activity() {
             orientation = LinearLayout.VERTICAL
 
             setPadding(
-                dp(if (tabletLayoutEnabled) 22 else 16),
-                dp(if (tabletLayoutEnabled) 20 else 16),
-                dp(if (tabletLayoutEnabled) 22 else 16),
-                dp(if (tabletLayoutEnabled) 20 else 16)
+                dp(if (tabletLayoutEnabled) 18 else 14),
+                dp(if (tabletLayoutEnabled) 16 else 14),
+                dp(if (tabletLayoutEnabled) 18 else 14),
+                dp(if (tabletLayoutEnabled) 16 else 14)
             )
 
-            background = roundedBackground(cardColor, if (tabletLayoutEnabled) 20 else 16).apply {
-                setStroke(dp(1), Color.rgb(39, 54, 69))
-            }
+            background = glassBackground(if (tabletLayoutEnabled) 20 else 16)
+            elevation = dp(4).toFloat()
         }
     }
 
@@ -655,7 +671,7 @@ class MainActivity : Activity() {
         navigationButtons.forEach { (key, button) ->
             val selected = key == name
             button.background = roundedBackground(
-                if (selected) Color.rgb(29, 58, 63) else Color.TRANSPARENT,
+                if (selected) Color.argb(150, 60, 135, 127) else Color.TRANSPARENT,
                 12
             )
             button.setTextColor(if (selected) accentColor else secondaryText)
@@ -708,10 +724,7 @@ class MainActivity : Activity() {
         button.textSize = if (tabletLayoutEnabled) 14f else 12f
         button.setTextColor(primaryText)
 
-        button.background = roundedBackground(
-            Color.rgb(38, 57, 74),
-            14
-        )
+        button.background = glassBackground(14)
 
         button.minHeight = dp(if (tabletLayoutEnabled) 52 else 46)
         button.setPadding(
@@ -809,7 +822,7 @@ class MainActivity : Activity() {
                     ) {
                         refresh()
                         if (::travelVisual.isInitialized && title == "Actuation Point") {
-                            travelVisual.setActuation(value / 100f)
+                            updateActuationVisuals(value)
                         }
                     }
 
@@ -1118,18 +1131,35 @@ class MainActivity : Activity() {
 
         createNotificationChannel()
 
-        window.statusBarColor = backgroundColor
-        window.navigationBarColor = backgroundColor
+        window.setBackgroundDrawable(ColorDrawable(Color.TRANSPARENT))
+        window.addFlags(android.view.WindowManager.LayoutParams.FLAG_SHOW_WALLPAPER)
+        if (Build.VERSION.SDK_INT >= 31) {
+            window.addFlags(android.view.WindowManager.LayoutParams.FLAG_BLUR_BEHIND)
+            window.attributes = window.attributes.apply {
+                blurBehindRadius = dp(18)
+                dimAmount = 0.08f
+            }
+        }
+        if (Build.VERSION.SDK_INT >= 34) {
+            window.attributes = window.attributes.apply {
+                setWallpaperTouchEventsEnabled(false)
+            }
+        }
+        window.statusBarColor = Color.argb(160, 11, 17, 25)
+        window.navigationBarColor = Color.argb(160, 11, 17, 25)
 
         if (Build.VERSION.SDK_INT >= 23) {
             window.decorView.systemUiVisibility = 0
         }
 
-        val root = LinearLayout(this).apply {
+        val root = FrameLayout(this).apply {
+            setBackgroundColor(Color.TRANSPARENT)
+        }
+        val appShell = LinearLayout(this).apply {
             orientation = if (wideLayoutEnabled) LinearLayout.HORIZONTAL else LinearLayout.VERTICAL
             val outerPadding = if (tabletLayoutEnabled) dp(24) else dp(16)
             setPadding(outerPadding, outerPadding, outerPadding, outerPadding)
-            setBackgroundColor(backgroundColor)
+            setBackgroundColor(Color.TRANSPARENT)
         }
 
         val header = LinearLayout(this).apply {
@@ -1187,7 +1217,11 @@ class MainActivity : Activity() {
         }
         val scroll = ScrollView(this).apply {
             setFillViewport(true)
-            setBackgroundColor(backgroundColor)
+            setBackgroundColor(Color.TRANSPARENT)
+            if (tabletLayoutEnabled && !wideLayoutEnabled) {
+                setPadding(0, 0, 0, dp(218))
+                clipToPadding = false
+            }
             addView(pageHost)
         }
 
@@ -1208,7 +1242,7 @@ class MainActivity : Activity() {
             val sidebar = LinearLayout(this).apply {
                 orientation = LinearLayout.VERTICAL
                 setPadding(dp(16), dp(16), dp(16), dp(16))
-                background = roundedBackground(cardColor, 20)
+                background = glassBackground(20)
                 addView(header)
                 val separator = View(this@MainActivity).apply { setBackgroundColor(secondaryCardColor) }
                 addView(separator, LinearLayout.LayoutParams(-1, dp(1)).apply {
@@ -1223,13 +1257,14 @@ class MainActivity : Activity() {
             }
             val sidebarParams = LinearLayout.LayoutParams(dp(220), -1)
             sidebarParams.marginEnd = dp(22)
-            root.addView(sidebar, sidebarParams)
+            wideSidebar = sidebar
+            appShell.addView(sidebar, sidebarParams)
         } else {
-            root.addView(header)
+            appShell.addView(header)
             val navParams = LinearLayout.LayoutParams(-1, -2)
             navParams.topMargin = dp(16)
             navParams.bottomMargin = dp(14)
-            root.addView(nav, navParams)
+            appShell.addView(nav, navParams)
         }
 
         val bannerParams = LinearLayout.LayoutParams(-1, -2)
@@ -1244,7 +1279,8 @@ class MainActivity : Activity() {
         } else {
             LinearLayout.LayoutParams(-1, 0, 1f)
         }
-        root.addView(mainContent, mainContentParams)
+        appShell.addView(mainContent, mainContentParams)
+        root.addView(appShell, FrameLayout.LayoutParams(-1, -1))
 
         // CONNECTION CARD
 
@@ -1310,8 +1346,24 @@ class MainActivity : Activity() {
             )
         )
 
+        profileSummary = createText(
+            "Editing P$profile · keyboard active profile will appear after connecting.",
+            if (tabletLayoutEnabled) 14f else 12f,
+            secondaryText
+        )
+        val profileSummaryParams = LinearLayout.LayoutParams(-1, -2).apply {
+            topMargin = dp(6)
+            bottomMargin = dp(10)
+        }
+        profileCard.addView(profileSummary, profileSummaryParams)
+        profileCard.addView(createText(
+            "Verified changes activate this profile on the keyboard.",
+            if (tabletLayoutEnabled) 12f else 11f,
+            secondaryText
+        ))
+
         val switchButton = btn(
-            "Set Current Profile as Active"
+            "Use This Profile on Keyboard"
         ) {
 
             val p = profile
@@ -1648,6 +1700,20 @@ class MainActivity : Activity() {
         ))
         addCard(pages.getValue("lighting"), lightingCard, fullWidth = true)
 
+        if (tabletLayoutEnabled) {
+            val triggerDock = createTriggerDock()
+            if (wideLayoutEnabled) {
+                wideSidebar?.addView(View(this), LinearLayout.LayoutParams(-1, 0, 1f))
+                wideSidebar?.addView(triggerDock, LinearLayout.LayoutParams(-1, -2).apply {
+                    topMargin = dp(14)
+                })
+            } else {
+                root.addView(triggerDock, FrameLayout.LayoutParams(dp(218), dp(226), Gravity.BOTTOM or Gravity.START).apply {
+                    setMargins(dp(20), 0, 0, dp(20))
+                })
+            }
+        }
+
         pages.values.forEach { it.visibility = View.GONE }
         pages.getValue("device").visibility = View.VISIBLE
 
@@ -1693,16 +1759,14 @@ class MainActivity : Activity() {
     }
 
     override fun onKeyDown(keyCode: Int, event: KeyEvent): Boolean {
-        if (::travelVisual.isInitialized && event.repeatCount == 0) {
-            travelVisual.setKeyEvent(keyNameForEvent(keyCode), true)
+        if (event.repeatCount == 0) {
+            updateKeyVisuals(keyNameForEvent(keyCode), true)
         }
         return super.onKeyDown(keyCode, event)
     }
 
     override fun onKeyUp(keyCode: Int, event: KeyEvent): Boolean {
-        if (::travelVisual.isInitialized) {
-            travelVisual.setKeyEvent(keyNameForEvent(keyCode), false)
-        }
+        updateKeyVisuals(keyNameForEvent(keyCode), false)
         return super.onKeyUp(keyCode, event)
     }
 
@@ -1710,6 +1774,30 @@ class MainActivity : Activity() {
         KeyEvent.keyCodeToString(keyCode)
             .removePrefix("KEYCODE_")
             .replace('_', ' ')
+
+    private fun updateKeyVisuals(name: String, pressed: Boolean) {
+        if (::travelVisual.isInitialized) travelVisual.setKeyEvent(name, pressed)
+        if (::dockVisual.isInitialized) dockVisual.setKeyEvent(name, pressed)
+    }
+
+    private fun updateActuationVisuals(value: Int) {
+        val millimeters = value / 100f
+        if (::travelVisual.isInitialized) travelVisual.setActuation(millimeters)
+        if (::dockVisual.isInitialized) dockVisual.setActuation(millimeters)
+    }
+
+    private fun createTriggerDock(): LinearLayout = LinearLayout(this).apply {
+        orientation = LinearLayout.VERTICAL
+        setPadding(dp(10), dp(8), dp(10), dp(8))
+        background = glassBackground(18)
+        elevation = dp(10).toFloat()
+        addView(btn("Trigger controls") { showPage("keys") }, LinearLayout.LayoutParams(-1, dp(44)))
+        dockVisual = KeyTravelView().apply {
+            contentDescription = "Pinned live trigger visual. Tap Trigger controls to open settings."
+            setActuation(actS.value / 100f)
+        }
+        addView(dockVisual, LinearLayout.LayoutParams(-1, dp(164)))
+    }
 
     // ------------------------------------------------------------
     // KEY NAMING
@@ -2228,6 +2316,17 @@ class MainActivity : Activity() {
                     showNotification("Lighting Verification Failed", "The keyboard's read-back did not match the requested color.", "warning")
                     return@guard
                 }
+                if (!activateSavedProfile(k, p)) {
+                    runOnUiThread {
+                        lightStatus.text = "Lighting saved to P$p, but the keyboard still reports P$activeProfile active."
+                    }
+                    showNotification(
+                        "Lighting Saved to P$p",
+                        "The color verified, but the keyboard still reports P$activeProfile as active.",
+                        "warning"
+                    )
+                    return@guard
+                }
                 log("Verified profile $p RGB color #${color.removePrefix("#").uppercase(Locale.US)} at $brightness% brightness.")
                 runOnUiThread {
                     lightStatus.text = "Profile $p lighting settings verified."
@@ -2313,6 +2412,8 @@ class MainActivity : Activity() {
             status.text =
                 "● Connected  |  Editing P$p  |  Active P$activeProfile"
 
+            updateProfileSummary()
+
             status.setTextColor(
                 Color.rgb(83, 211, 160)
             )
@@ -2342,6 +2443,43 @@ class MainActivity : Activity() {
                 "Profile Switched",
                 "Keyboard is now using profile $p."
             )
+        }
+    }
+
+    /** Activates the profile just written so reconnecting uses those saved settings. */
+    private fun activateSavedProfile(k: Kb, p: Int): Boolean {
+        val before = k.simple(0x04)?.getOrNull(0)?.toInt()?.and(0xFF)
+        if (before != p) {
+            log("Activating saved profile $p ...")
+            k.sendProfileSwitch(p)
+            Thread.sleep(1200)
+            val info = k.simple(0x04)
+            val actual = info?.getOrNull(0)?.toInt()?.and(0xFF)
+            if (actual != p) {
+                log("Profile activation could not be verified (requested P$p, reported $actual).")
+                runOnUiThread { updateProfileSummary() }
+                return false
+            }
+            activeProfile = actual
+        } else {
+            activeProfile = p
+        }
+        runOnUiThread { updateProfileSummary() }
+        log("Saved settings are on active profile P$p.")
+        return true
+    }
+
+    private fun updateProfileSummary() {
+        if (::profileSummary.isInitialized) {
+            profileSummary.text = if (activeProfile == profile) {
+                "Editing P$profile · active on keyboard"
+            } else {
+                "Editing P$profile · keyboard is using P$activeProfile"
+            }
+            profileSummary.setTextColor(if (activeProfile == profile) accentColor else warningColor)
+        }
+        if (::status.isInitialized && kb != null) {
+            status.text = "● Connected  |  Editing P$profile  |  Active P$activeProfile"
         }
     }
 
@@ -2528,6 +2666,7 @@ class MainActivity : Activity() {
         val rl = relS.value
 
         val p = profile
+        triggerScope.text = "Saving to P$p… keep the keyboard connected until verification finishes."
 
         io.execute {
 
@@ -2661,12 +2800,31 @@ class MainActivity : Activity() {
 
         if (ok == sel.size) {
 
+            if (!activateSavedProfile(k, p)) {
+                runOnUiThread {
+                    triggerScope.text = "Saved to P$p, but the active profile could not be confirmed."
+                }
+                showNotification(
+                    "Settings Saved to P$p",
+                    "The values verified, but the keyboard still reports P$activeProfile as active.",
+                    "warning"
+                )
+                return
+            }
+
             showNotification(
                 "Settings Applied",
-                "Rapid Trigger settings verified on all $ok selected keys."
+                "Verified on $ok keys and saved to active profile P$p."
             )
+            runOnUiThread {
+                triggerScope.text = "Verified and active on P$p. Safe to reconnect."
+            }
 
         } else {
+
+            runOnUiThread {
+                triggerScope.text = "Only $ok of ${sel.size} keys verified. Check Activity for details."
+            }
 
             showNotification(
                 "Verification Warning",
@@ -2832,9 +2990,18 @@ class MainActivity : Activity() {
 
         if (ok == sel.size) {
 
+            if (!activateSavedProfile(k, p)) {
+                showNotification(
+                    "Remapping Saved to P$p",
+                    "The keys verified, but the keyboard still reports P$activeProfile as active.",
+                    "warning"
+                )
+                return
+            }
+
             showNotification(
                 "Remapping Complete",
-                "$ok selected keys successfully verified."
+                "$ok keys verified and saved to active profile P$p."
             )
 
         } else {
@@ -3044,6 +3211,15 @@ class MainActivity : Activity() {
         log("Backup written, reloading ...")
 
         if (loadProfile(p)) {
+
+            if (!activateSavedProfile(k, p)) {
+                showNotification(
+                    "Backup Restored to P$p",
+                    "Settings restored, but the keyboard still reports P$activeProfile as active.",
+                    "warning"
+                )
+                return
+            }
 
             showNotification(
                 "Backup Restored",

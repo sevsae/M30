@@ -1,9 +1,11 @@
 <resources>
     <style name="M30Theme" parent="@android:style/Theme.Material.NoActionBar">
         <item name="android:colorAccent">#63D7C3</item>
-        <item name="android:windowBackground">#0B1119</item>
-        <item name="android:statusBarColor">#0B1119</item>
-        <item name="android:navigationBarColor">#0B1119</item>
+        <item name="android:windowBackground">@android:color/transparent</item>
+        <item name="android:windowIsTranslucent">true</item>
+        <item name="android:windowShowWallpaper">true</item>
+        <item name="android:statusBarColor">#990B1119</item>
+        <item name="android:navigationBarColor">#990B1119</item>
         <item name="android:windowLightStatusBar">false</item>
     </style>
 </resources>
