@@ -1255,6 +1255,9 @@ class MainActivity : Activity() {
             crossWindowBlurListener = updateBlur
             updateBlur.accept(windowManager.isCrossWindowBlurEnabled)
             windowManager.addCrossWindowBlurEnabledListener(mainExecutor, updateBlur)
+        } else {
+            window.addFlags(android.view.WindowManager.LayoutParams.FLAG_DIM_BEHIND)
+            window.attributes = window.attributes.apply { dimAmount = 0.28f }
         }
         if (Build.VERSION.SDK_INT >= 34) {
             window.attributes = window.attributes.apply {

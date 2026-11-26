@@ -10,9 +10,8 @@ internal data class TriggerSettings(
 
 /** Decodes the trigger values stored in one key's eight-byte profile record. */
 internal fun readTriggerSettings(profileData: ByteArray, keyIndex: Int): TriggerSettings? {
-    if (keyIndex < 0) return null
+    if (keyIndex < 0 || keyIndex >= profileData.size / 8) return null
     val offset = keyIndex * 8
-    if (offset < 0 || offset + 8 > profileData.size) return null
 
     fun unsigned(index: Int): Int = profileData[offset + index].toInt() and 0xFF
     fun distance(lowIndex: Int, highIndex: Int): Int =
