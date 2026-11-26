@@ -53,6 +53,7 @@ import android.widget.TextView
 import java.io.File
 import java.util.Locale
 import java.util.concurrent.Executors
+import java.util.function.Consumer
 
 private data class Target(
     val name: String,
@@ -130,8 +131,9 @@ class MainActivity : Activity() {
     private lateinit var lightPreview: View
     private lateinit var lightStatus: TextView
     private lateinit var travelVisual: KeyTravelView
-    private lateinit var dockVisual: KeyTravelView
+    private lateinit var dockVisual: TriggerDockView
     private var wideSidebar: LinearLayout? = null
+    private var crossWindowBlurListener: Consumer<Boolean>? = null
 
     private val notificationChannelId = "m30_config_notifications"
     private var notificationCounter = 100
@@ -141,7 +143,7 @@ class MainActivity : Activity() {
     // ------------------------------------------------------------
 
     private val cardColor = Color.argb(208, 22, 32, 44)
-    private val secondaryCardColor = Color.argb(186, 34, 48, 60)
+    private val secondaryCardColor = Color.argb(142, 34, 48, 60)
 
     private val accentColor = Color.rgb(99, 215, 195)
     private val successColor = Color.rgb(35, 145, 111)
@@ -150,6 +152,110 @@ class MainActivity : Activity() {
 
     private val primaryText = Color.rgb(242, 246, 249)
     private val secondaryText = Color.rgb(166, 181, 195)
+
+    /** Compact live gauge used by the pinned tablet dock. */
+    private inner class TriggerDockView : View(this@MainActivity) {
+        private val ink = Paint(Paint.ANTI_ALIAS_FLAG)
+        private var actuationMm = 2.0f
+        private var keyName = ""
+        private var keyDown = false
+
+        fun setKeyEvent(name: String, pressed: Boolean) {
+            keyName = name
+            keyDown = pressed
+            invalidate()
+        }
+
+        fun setActuation(valueMm: Float) {
+            actuationMm = valueMm.coerceIn(0.1f, 3.4f)
+            invalidate()
+        }
+
+        override fun onDraw(canvas: Canvas) {
+            super.onDraw(canvas)
+            val w = width.toFloat()
+            val h = height.toFloat()
+            if (w <= dp(32) || h <= dp(72)) return
+
+            val left = dp(8).toFloat()
+            val right = w - dp(8)
+            val top = dp(4).toFloat()
+
+            ink.style = Paint.Style.FILL
+            ink.shader = android.graphics.LinearGradient(
+                left, top, right, h - dp(4),
+                Color.argb(105, 148, 185, 192),
+                Color.argb(48, 25, 43, 55),
+                android.graphics.Shader.TileMode.CLAMP
+            )
+            canvas.drawRoundRect(RectF(left, top, right, h - dp(4)), dp(15).toFloat(), dp(15).toFloat(), ink)
+            ink.shader = null
+            ink.style = Paint.Style.STROKE
+            ink.strokeWidth = dp(1).toFloat()
+            ink.color = Color.argb(94, 215, 240, 235)
+            canvas.drawRoundRect(RectF(left, top, right, h - dp(4)), dp(15).toFloat(), dp(15).toFloat(), ink)
+            ink.style = Paint.Style.FILL
+
+            ink.color = secondaryText
+            ink.textSize = sp(10f)
+            ink.typeface = Typeface.create("sans-serif-medium", Typeface.BOLD)
+            canvas.drawText("ACTUATION POINT", left + dp(12), top + dp(22), ink)
+
+            ink.color = primaryText
+            ink.textSize = sp(25f)
+            ink.typeface = Typeface.create("sans-serif-medium", Typeface.NORMAL)
+            val value = "%.2f".format(Locale.US, actuationMm)
+            canvas.drawText(value, left + dp(12), top + dp(55), ink)
+            ink.color = accentColor
+            ink.textSize = sp(13f)
+            canvas.drawText("mm", left + dp(12) + ink.measureText(value) + dp(5), top + dp(55), ink)
+
+            val railLeft = left + dp(12)
+            val railRight = right - dp(12)
+            val railY = top + dp(76)
+            val railWidth = railRight - railLeft
+            ink.color = Color.argb(30, 230, 244, 245)
+            for (tick in 0..14) {
+                val tickX = railLeft + railWidth * tick / 14f
+                canvas.drawRoundRect(
+                    RectF(tickX - dp(1), railY - dp(9), tickX + dp(1), railY - dp(6)),
+                    dp(1).toFloat(), dp(1).toFloat(), ink
+                )
+            }
+            ink.color = Color.argb(180, 9, 18, 25)
+            canvas.drawRoundRect(RectF(railLeft, railY - dp(3), railRight, railY + dp(3)), dp(4).toFloat(), dp(4).toFloat(), ink)
+            val markerX = railLeft + railWidth * (actuationMm / 3.5f)
+            ink.color = Color.argb(70, 99, 215, 195)
+            canvas.drawRoundRect(RectF(railLeft, railY - dp(3), markerX, railY + dp(3)), dp(4).toFloat(), dp(4).toFloat(), ink)
+            ink.color = accentColor
+            canvas.drawRoundRect(RectF(markerX - dp(2), railY - dp(8), markerX + dp(2), railY + dp(8)), dp(2).toFloat(), dp(2).toFloat(), ink)
+
+            ink.color = secondaryText
+            ink.textSize = sp(9f)
+            ink.typeface = Typeface.create("sans-serif", Typeface.NORMAL)
+            canvas.drawText("0.0", railLeft, railY + dp(19), ink)
+            val maxLabel = "3.5 mm"
+            canvas.drawText(maxLabel, railRight - ink.measureText(maxLabel), railY + dp(19), ink)
+
+            val state = when {
+                keyName.isEmpty() -> "PRESS ANY KEY"
+                keyDown -> "${keyName.take(14)}  ·  PRESSED"
+                else -> "${keyName.take(14)}  ·  RELEASED"
+            }
+            ink.color = if (keyDown) accentColor else secondaryText
+            ink.textSize = sp(10f)
+            ink.typeface = Typeface.create("sans-serif-medium", Typeface.BOLD)
+            ink.color = Color.argb(44, 8, 18, 24)
+            canvas.drawRoundRect(
+                RectF(left + dp(8), h - dp(27), right - dp(8), h - dp(6)),
+                dp(10).toFloat(), dp(10).toFloat(), ink
+            )
+            ink.color = if (keyDown) accentColor else secondaryText
+            canvas.drawText(state, left + dp(12), h - dp(13), ink)
+        }
+
+        private fun sp(value: Float): Float = value * resources.displayMetrics.scaledDensity
+    }
 
     /** A switch illustration driven by digital HID key events and the configured actuation threshold. */
     private inner class KeyTravelView : View(this@MainActivity) {
@@ -559,12 +665,12 @@ class MainActivity : Activity() {
         GradientDrawable(
             GradientDrawable.Orientation.TOP_BOTTOM,
             intArrayOf(
-                Color.argb(222, 54, 70, 83),
-                Color.argb(202, 26, 38, 51)
+                Color.argb(178, 54, 70, 83),
+                Color.argb(158, 20, 31, 43)
             )
         ).apply {
             cornerRadius = dp(radius).toFloat()
-            setStroke(dp(1), Color.argb(138, 185, 215, 221))
+            setStroke(dp(1), Color.argb(92, 205, 230, 232))
         }
 
     private fun createText(
@@ -724,7 +830,13 @@ class MainActivity : Activity() {
         button.textSize = if (tabletLayoutEnabled) 14f else 12f
         button.setTextColor(primaryText)
 
-        button.background = glassBackground(14)
+        button.background = GradientDrawable(
+            GradientDrawable.Orientation.TOP_BOTTOM,
+            intArrayOf(Color.argb(104, 111, 145, 158), Color.argb(72, 45, 67, 82))
+        ).apply {
+            cornerRadius = dp(14).toFloat()
+            setStroke(dp(1), Color.argb(72, 205, 230, 232))
+        }
 
         button.minHeight = dp(if (tabletLayoutEnabled) 52 else 46)
         button.setPadding(
@@ -1134,11 +1246,25 @@ class MainActivity : Activity() {
         window.setBackgroundDrawable(ColorDrawable(Color.TRANSPARENT))
         window.addFlags(android.view.WindowManager.LayoutParams.FLAG_SHOW_WALLPAPER)
         if (Build.VERSION.SDK_INT >= 31) {
-            window.addFlags(android.view.WindowManager.LayoutParams.FLAG_BLUR_BEHIND)
-            window.attributes = window.attributes.apply {
-                blurBehindRadius = dp(18)
-                dimAmount = 0.08f
+            val updateBlur = Consumer<Boolean> { blurEnabled ->
+                if (isFinishing || isDestroyed) return@Consumer
+                if (blurEnabled) {
+                    window.addFlags(android.view.WindowManager.LayoutParams.FLAG_BLUR_BEHIND)
+                    window.attributes = window.attributes.apply {
+                        blurBehindRadius = dp(32)
+                        dimAmount = 0.06f
+                    }
+                } else {
+                    window.clearFlags(android.view.WindowManager.LayoutParams.FLAG_BLUR_BEHIND)
+                    window.attributes = window.attributes.apply {
+                        blurBehindRadius = 0
+                        dimAmount = 0.15f
+                    }
+                }
             }
+            crossWindowBlurListener = updateBlur
+            updateBlur.accept(windowManager.isCrossWindowBlurEnabled)
+            windowManager.addCrossWindowBlurEnabledListener(mainExecutor, updateBlur)
         }
         if (Build.VERSION.SDK_INT >= 34) {
             window.attributes = window.attributes.apply {
@@ -1219,7 +1345,7 @@ class MainActivity : Activity() {
             setFillViewport(true)
             setBackgroundColor(Color.TRANSPARENT)
             if (tabletLayoutEnabled && !wideLayoutEnabled) {
-                setPadding(0, 0, 0, dp(218))
+                setPadding(0, 0, 0, dp(190) + navigationBarInset())
                 clipToPadding = false
             }
             addView(pageHost)
@@ -1241,7 +1367,7 @@ class MainActivity : Activity() {
         if (wideLayoutEnabled) {
             val sidebar = LinearLayout(this).apply {
                 orientation = LinearLayout.VERTICAL
-                setPadding(dp(16), dp(16), dp(16), dp(16))
+                setPadding(dp(16), dp(16), dp(16), dp(16) + navigationBarInset())
                 background = glassBackground(20)
                 addView(header)
                 val separator = View(this@MainActivity).apply { setBackgroundColor(secondaryCardColor) }
@@ -1708,8 +1834,8 @@ class MainActivity : Activity() {
                     topMargin = dp(14)
                 })
             } else {
-                root.addView(triggerDock, FrameLayout.LayoutParams(dp(218), dp(226), Gravity.BOTTOM or Gravity.START).apply {
-                    setMargins(dp(20), 0, 0, dp(20))
+                root.addView(triggerDock, FrameLayout.LayoutParams(dp(218), dp(178), Gravity.BOTTOM or Gravity.START).apply {
+                    setMargins(dp(20), 0, 0, dp(18) + navigationBarInset())
                 })
             }
         }
@@ -1744,6 +1870,11 @@ class MainActivity : Activity() {
     }
 
     override fun onDestroy() {
+
+        if (Build.VERSION.SDK_INT >= 31) {
+            crossWindowBlurListener?.let { windowManager.removeCrossWindowBlurEnabledListener(it) }
+            crossWindowBlurListener = null
+        }
 
         super.onDestroy()
 
@@ -1790,13 +1921,36 @@ class MainActivity : Activity() {
         orientation = LinearLayout.VERTICAL
         setPadding(dp(10), dp(8), dp(10), dp(8))
         background = glassBackground(18)
-        elevation = dp(10).toFloat()
-        addView(btn("Trigger controls") { showPage("keys") }, LinearLayout.LayoutParams(-1, dp(44)))
-        dockVisual = KeyTravelView().apply {
+        elevation = dp(12).toFloat()
+
+        val heading = LinearLayout(this@MainActivity).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            val title = createText("Trigger", 14f, primaryText, true)
+            addView(title, LinearLayout.LayoutParams(0, -2, 1f))
+            addView(TextView(this@MainActivity).apply {
+                text = "OPEN"
+                textSize = 10f
+                typeface = Typeface.DEFAULT_BOLD
+                setTextColor(accentColor)
+                gravity = Gravity.CENTER
+                setPadding(dp(10), dp(8), dp(8), dp(8))
+                contentDescription = "Open trigger controls"
+                setOnClickListener { showPage("keys") }
+            })
+        }
+        addView(heading, LinearLayout.LayoutParams(-1, dp(34)))
+
+        dockVisual = TriggerDockView().apply {
             contentDescription = "Pinned live trigger visual. Tap Trigger controls to open settings."
             setActuation(actS.value / 100f)
         }
-        addView(dockVisual, LinearLayout.LayoutParams(-1, dp(164)))
+        addView(dockVisual, LinearLayout.LayoutParams(-1, dp(126)))
+    }
+
+    private fun navigationBarInset(): Int {
+        val resourceId = resources.getIdentifier("navigation_bar_height", "dimen", "android")
+        return if (resourceId != 0) resources.getDimensionPixelSize(resourceId) else dp(24)
     }
 
     // ------------------------------------------------------------
