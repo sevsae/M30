@@ -7,7 +7,7 @@ import org.junit.Test
 class TriggerSettingsTest {
     @Test
     fun decodesTheSelectedKeysSavedTriggerValues() {
-        val profileData = ByteArray(16)
+        val profileData = ByteArray(1024)
         val offset = 6 * 8
         profileData[offset + 1] = 2
         profileData[offset + 2] = 79
